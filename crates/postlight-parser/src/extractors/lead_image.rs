@@ -4,9 +4,8 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static POSITIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new("upload|wp-content|large|photo|wp-image").expect("positive hints re")
-});
+static POSITIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new("upload|wp-content|large|photo|wp-image").expect("positive hints re"));
 static NEGATIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
         "spacer|sprite|blank|throbber|gradient|tile|bg|background|icon|social|header|hdr|advert|spinner|loader|loading|default|rating|share|facebook|twitter|theme|promo|ads|wp-includes",

@@ -46,9 +46,8 @@ pub fn clean_dek(dek: &str, excerpt: Option<&str>) -> Option<String> {
 
 // --- title ---
 
-static TITLE_SPLITTERS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r": | - | \| ").expect("title splitters re")
-});
+static TITLE_SPLITTERS_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r": | - | \| ").expect("title splitters re"));
 
 static DOMAIN_ENDINGS_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\.com$|\.net$|\.org$|\.co\.uk$").expect("domain endings re"));
@@ -125,15 +124,13 @@ fn extract_breadcrumb_title(split_title: &[String], text: &str) -> Option<String
         }
     }
 
-    let (max_term, term_count) = term_counts
-        .iter()
-        .fold(("", 0usize), |acc, (term, count)| {
-            if *count > acc.1 {
-                (*term, *count)
-            } else {
-                acc
-            }
-        });
+    let (max_term, term_count) = term_counts.iter().fold(("", 0usize), |acc, (term, count)| {
+        if *count > acc.1 {
+            (*term, *count)
+        } else {
+            acc
+        }
+    });
 
     // A splitter used more than once is probably the breadcrumber; re-split
     // on that literal (JS `text.split(maxTerm)` drops the separators).
@@ -145,7 +142,11 @@ fn extract_breadcrumb_title(split_title: &[String], text: &str) -> Option<String
 
     let first = segments.first().map(String::as_str).unwrap_or("");
     let last = segments.last().map(String::as_str).unwrap_or("");
-    let longest = if first.len() > last.len() { first } else { last };
+    let longest = if first.len() > last.len() {
+        first
+    } else {
+        last
+    };
     if longest.len() > 10 {
         return Some(longest.to_string());
     }
@@ -208,9 +209,8 @@ pub fn clean_excerpt(content: &str, max_length: usize) -> String {
 
 // --- lead image url ---
 
-static VALID_WEB_URL_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(https?|ftp)://").expect("web url re")
-});
+static VALID_WEB_URL_RE: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^(https?|ftp)://").expect("web url re"));
 
 /// Validate a lead image URL (upstream `cleanImage` via `valid-url`).
 pub fn clean_lead_image_url(url: &str) -> Option<String> {
@@ -264,7 +264,11 @@ pub fn clean_date_string(date_string: &str) -> String {
 }
 
 /// Subtract `n` units from a timestamp (moment `subtract`).
-fn subtract_units(now: chrono::DateTime<chrono::Utc>, n: i64, unit: &str) -> chrono::DateTime<chrono::Utc> {
+fn subtract_units(
+    now: chrono::DateTime<chrono::Utc>,
+    n: i64,
+    unit: &str,
+) -> chrono::DateTime<chrono::Utc> {
     use chrono::{Duration, Months};
     match unit {
         u if u.starts_with("second") => now - Duration::seconds(n),
@@ -423,11 +427,17 @@ fn parse_in_timezone(
     if let Some(fmt) = format {
         let chrono_fmt = moment_to_chrono(fmt);
         if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(date_string, &chrono_fmt) {
-            return naive.and_local_timezone(tz).single().map(|dt| dt.with_timezone(&chrono::Utc));
+            return naive
+                .and_local_timezone(tz)
+                .single()
+                .map(|dt| dt.with_timezone(&chrono::Utc));
         }
         if let Ok(naive) = chrono::NaiveDate::parse_from_str(date_string, &chrono_fmt) {
             if let Some(dt) = naive.and_hms_opt(0, 0, 0) {
-                return dt.and_local_timezone(tz).single().map(|dt| dt.with_timezone(&chrono::Utc));
+                return dt
+                    .and_local_timezone(tz)
+                    .single()
+                    .map(|dt| dt.with_timezone(&chrono::Utc));
             }
         }
         return None;
@@ -506,7 +516,9 @@ pub fn clean_date_published(
     // Milliseconds / seconds timestamps.
     if MS_DATE_STRING.is_match(date_string) {
         let ms: i64 = date_string.parse().ok()?;
-        return Some(to_iso_string(&chrono::Utc.timestamp_millis_opt(ms).single()?));
+        return Some(to_iso_string(
+            &chrono::Utc.timestamp_millis_opt(ms).single()?,
+        ));
     }
     if SEC_DATE_STRING.is_match(date_string) {
         let secs: i64 = date_string.parse().ok()?;
@@ -548,7 +560,9 @@ mod date_tests {
     #[test]
     fn ago_strings() {
         let d = clean_date_published("2 days ago", None, None).unwrap();
-        let parsed = chrono::DateTime::parse_from_rfc3339(&d).unwrap().with_timezone(&chrono::Utc);
+        let parsed = chrono::DateTime::parse_from_rfc3339(&d)
+            .unwrap()
+            .with_timezone(&chrono::Utc);
         let two_days = chrono::Duration::days(2);
         assert!((chrono::Utc::now() - two_days - parsed).num_minutes().abs() < 5);
     }
@@ -560,8 +574,14 @@ mod date_tests {
 
     #[test]
     fn moment_format_mapping() {
-        assert_eq!(moment_to_chrono("MMMM D, YYYY h:mm a"), "%B %-d, %Y %-I:%M %P");
-        assert_eq!(moment_to_chrono("YYYY年MM月DD日 HH時mm分"), "%Y年%m月%d日 %H時%M分");
+        assert_eq!(
+            moment_to_chrono("MMMM D, YYYY h:mm a"),
+            "%B %-d, %Y %-I:%M %P"
+        );
+        assert_eq!(
+            moment_to_chrono("YYYY年MM月DD日 HH時mm分"),
+            "%Y年%m月%d日 %H時%M分"
+        );
         assert_eq!(moment_to_chrono("YYYY-MM-DD|HH[h]mm"), "%Y-%m-%d|%Hh%M");
     }
 
@@ -604,7 +624,10 @@ mod tests {
 
     #[test]
     fn dek_validation() {
-        assert_eq!(clean_dek("A short dek.", None).as_deref(), Some("A short dek."));
+        assert_eq!(
+            clean_dek("A short dek.", None).as_deref(),
+            Some("A short dek.")
+        );
         assert_eq!(clean_dek("abc", None), None);
         assert_eq!(clean_dek("short", None).as_deref(), Some("short"));
         assert_eq!(clean_dek("Visit http://example.com now", None), None);
@@ -617,13 +640,19 @@ mod tests {
             "The Best Gadgets on Earth : Bits : Blogs : NYTimes.com",
             "http://www.nytimes.com/",
         );
-        assert!(resolved.contains("The Best Gadgets on Earth"), "got: {resolved}");
+        assert!(
+            resolved.contains("The Best Gadgets on Earth"),
+            "got: {resolved}"
+        );
     }
 
     #[test]
     fn ellipsize_truncates_at_word() {
         assert_eq!(ellipsize("short", 100, "&hellip;"), "short");
-        assert_eq!(ellipsize("one two three four", 10, "&hellip;"), "one two&hellip;");
+        assert_eq!(
+            ellipsize("one two three four", 10, "&hellip;"),
+            "one two&hellip;"
+        );
     }
 
     #[test]

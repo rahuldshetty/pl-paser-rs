@@ -202,7 +202,11 @@ fn score_ps(doc: &mut Doc, weight_nodes: bool) {
 
 fn add_score_to(doc: &mut Doc, id: NodeId, score: f64) {
     // Convert spans to divs when scoring (upstream `convertSpans`).
-    if doc.element_name_of(id).map(|n| n.eq_ignore_ascii_case("span")).unwrap_or(false) {
+    if doc
+        .element_name_of(id)
+        .map(|n| n.eq_ignore_ascii_case("span"))
+        .unwrap_or(false)
+    {
         doc.convert_node_to(id, "div");
     }
     add_score(doc, id, score);
@@ -267,9 +271,7 @@ pub fn merge_siblings_result(doc: &Doc, candidate: NodeId, top_score: f64) -> Me
                 merged.push(sibling);
                 continue;
             }
-            if sibling_content_length <= 80
-                && density == 0.0
-                && has_sentence_end(&sibling_content)
+            if sibling_content_length <= 80 && density == 0.0 && has_sentence_end(&sibling_content)
             {
                 merged.push(sibling);
             }
@@ -370,6 +372,9 @@ mod tests {
         let p_score = get_or_init_score(&mut d, p, true);
         assert!(p_score >= 1.0);
         let div_score = get_score(&d, div).unwrap_or(0.0);
-        assert!(div_score >= p_score * 0.25, "div {div_score} vs p {p_score}");
+        assert!(
+            div_score >= p_score * 0.25,
+            "div {div_score} vs p {p_score}"
+        );
     }
 }

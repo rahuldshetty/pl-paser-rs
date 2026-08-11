@@ -7,14 +7,16 @@ use std::collections::HashMap;
 use ego_tree::NodeId;
 use url::Url;
 
-use crate::cleaners::{clean_author, clean_date_published, clean_dek, clean_lead_image_url, clean_title};
+use crate::cleaners::{
+    clean_author, clean_date_published, clean_dek, clean_lead_image_url, clean_title,
+};
 use crate::dom::{append_cloned, Doc};
 use crate::dom_utils;
 use crate::extractors::content::{clean_content, ContentOptions};
 use crate::extractors::generic;
 use crate::extractors::transforms;
 use crate::types::{
-    Article, ContentType, ContentField, CustomExtractor, DateField, ExtendField, Field, FieldValue,
+    Article, ContentField, ContentType, CustomExtractor, DateField, ExtendField, Field, FieldValue,
     Selector, Transform,
 };
 
@@ -77,7 +79,8 @@ pub fn run_extraction(ctx: &ExtractContext<'_>, extractor: Option<&CustomExtract
 pub fn extract_generic(ctx: &ExtractContext<'_>) -> Article {
     let title = generic::extract_title(ctx.doc, ctx.url, &ctx.meta_cache);
     let content = generic::extract_content(ctx.doc, ctx.url);
-    let lead_image_url = generic::extract_lead_image_url(ctx.doc, content.as_deref(), &ctx.meta_cache);
+    let lead_image_url =
+        generic::extract_lead_image_url(ctx.doc, content.as_deref(), &ctx.meta_cache);
     let excerpt = generic::extract_excerpt(ctx.doc, content.as_deref(), &ctx.meta_cache);
     let word_count = generic::extract_word_count(content.as_deref());
     let direction = generic::extract_direction(&title);
@@ -177,10 +180,12 @@ fn extract_result(
 
     if ctx.fallback {
         return match field {
-            "title" => SelectResult::Value(generic::extract_title(ctx.doc, ctx.url, &ctx.meta_cache)),
-            "content" => SelectResult::Value(
-                generic::extract_content(ctx.doc, ctx.url).unwrap_or_default(),
-            ),
+            "title" => {
+                SelectResult::Value(generic::extract_title(ctx.doc, ctx.url, &ctx.meta_cache))
+            }
+            "content" => {
+                SelectResult::Value(generic::extract_content(ctx.doc, ctx.url).unwrap_or_default())
+            }
             "author" => SelectResult::Value(
                 generic::extract_author(ctx.doc, &ctx.meta_cache).unwrap_or_default(),
             ),
@@ -196,8 +201,13 @@ fn extract_result(
                 generic::extract_excerpt(ctx.doc, None, &ctx.meta_cache).unwrap_or_default(),
             ),
             "next_page_url" => SelectResult::Value(
-                generic::extract_next_page_url(ctx.doc, ctx.url, ctx.parsed_url, &ctx.previous_urls)
-                    .unwrap_or_default(),
+                generic::extract_next_page_url(
+                    ctx.doc,
+                    ctx.url,
+                    ctx.parsed_url,
+                    &ctx.previous_urls,
+                )
+                .unwrap_or_default(),
             ),
             _ => SelectResult::Value(String::new()),
         };
@@ -208,7 +218,10 @@ fn extract_result(
 
 fn field_opts(extractor: &CustomExtractor, field: &str) -> Option<FieldOpts> {
     match field {
-        "title" => extractor.title.as_ref().map(|f| FieldOpts::Field(f.clone())),
+        "title" => extractor
+            .title
+            .as_ref()
+            .map(|f| FieldOpts::Field(f.clone())),
         "author" => match &extractor.author {
             Some(FieldValue::Value(v)) => Some(FieldOpts::Value(v.clone())),
             Some(FieldValue::Selectors(f)) => Some(FieldOpts::Field(f.clone())),
@@ -223,12 +236,18 @@ fn field_opts(extractor: &CustomExtractor, field: &str) -> Option<FieldOpts> {
             .as_ref()
             .map(|f| FieldOpts::Field(f.clone())),
         "dek" => extractor.dek.as_ref().map(|f| FieldOpts::Field(f.clone())),
-        "excerpt" => extractor.excerpt.as_ref().map(|f| FieldOpts::Field(f.clone())),
+        "excerpt" => extractor
+            .excerpt
+            .as_ref()
+            .map(|f| FieldOpts::Field(f.clone())),
         "next_page_url" => extractor
             .next_page_url
             .as_ref()
             .map(|f| FieldOpts::Field(f.clone())),
-        "content" => extractor.content.as_ref().map(|f| FieldOpts::Content(f.clone())),
+        "content" => extractor
+            .content
+            .as_ref()
+            .map(|f| FieldOpts::Content(f.clone())),
         _ => None,
     }
 }
@@ -250,12 +269,28 @@ fn select_for_field(
 
     match extraction_opts {
         FieldOpts::Field(f) => {
-            let matching = find_matching_selector(ctx.doc, &f.selectors, false, override_allow_multiple)?;
-            select_text_or_attr(ctx, field, matching, override_allow_multiple, None, context_value)
+            let matching =
+                find_matching_selector(ctx.doc, &f.selectors, false, override_allow_multiple)?;
+            select_text_or_attr(
+                ctx,
+                field,
+                matching,
+                override_allow_multiple,
+                None,
+                context_value,
+            )
         }
         FieldOpts::Date(d) => {
-            let matching = find_matching_selector(ctx.doc, &d.selectors, false, override_allow_multiple)?;
-            select_text_or_attr(ctx, field, matching, override_allow_multiple, Some(&d), context_value)
+            let matching =
+                find_matching_selector(ctx.doc, &d.selectors, false, override_allow_multiple)?;
+            select_text_or_attr(
+                ctx,
+                field,
+                matching,
+                override_allow_multiple,
+                Some(&d),
+                context_value,
+            )
         }
         FieldOpts::Content(c) => {
             let matching = find_matching_selector(ctx.doc, &c.selectors, true, false)?;
@@ -279,7 +314,11 @@ fn find_matching_selector(
                     return Some(selector.clone());
                 }
             }
-            Selector::Attr { selector: sel, attr, .. } => {
+            Selector::Attr {
+                selector: sel,
+                attr,
+                ..
+            } => {
                 let count = doc.count(sel);
                 if allow_multiple || count == 1 {
                     if let Some(v) = doc.attr(sel, attr) {
@@ -408,7 +447,9 @@ fn select_text_or_attr(
     };
 
     if allow_multiple {
-        Some(SelectResult::Multiple(values.into_iter().map(clean_one).collect()))
+        Some(SelectResult::Multiple(
+            values.into_iter().map(clean_one).collect(),
+        ))
     } else {
         let v = values.into_iter().next().unwrap_or_default();
         Some(SelectResult::Value(clean_one(v)))
@@ -428,9 +469,10 @@ pub fn select_extended_types(
             .map(|s| Selector::Css(s.clone()))
             .collect();
         let field = Field { selectors };
-        let matching = find_matching_selector(ctx.doc, &field.selectors, false, opts.allow_multiple);
-        let value =
-            matching.and_then(|m| select_text_or_attr(ctx, name, m, opts.allow_multiple, None, None));
+        let matching =
+            find_matching_selector(ctx.doc, &field.selectors, false, opts.allow_multiple);
+        let value = matching
+            .and_then(|m| select_text_or_attr(ctx, name, m, opts.allow_multiple, None, None));
         match value {
             Some(SelectResult::Value(v)) => {
                 results.insert(name.clone(), serde_json::Value::String(v));

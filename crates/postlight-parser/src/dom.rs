@@ -19,17 +19,23 @@ pub struct Doc {
 
 impl Doc {
     pub fn parse_document(input: &str) -> Doc {
-        Doc { html: Html::parse_document(input) }
+        Doc {
+            html: Html::parse_document(input),
+        }
     }
 
     pub fn parse_fragment(input: &str) -> Doc {
-        Doc { html: Html::parse_fragment(input) }
+        Doc {
+            html: Html::parse_fragment(input),
+        }
     }
 
     /// An empty fragment tree with no children (unlike `parse_fragment("")`,
     /// which still creates an `<html>` root element).
     pub fn new_fragment() -> Doc {
-        Doc { html: Html::new_fragment() }
+        Doc {
+            html: Html::new_fragment(),
+        }
     }
 
     /// Serialize the whole document.
@@ -74,7 +80,10 @@ impl Doc {
 
     /// Trimmed text of every match.
     pub fn text_all(&self, selector: &str) -> Vec<String> {
-        self.select(selector).iter().map(|e| element_text(*e)).collect()
+        self.select(selector)
+            .iter()
+            .map(|e| element_text(*e))
+            .collect()
     }
 
     /// Trimmed attribute value of the first match.
@@ -319,8 +328,11 @@ impl Doc {
     pub fn wrap(&mut self, id: NodeId, tag: &str) -> Option<NodeId> {
         let wrapper_id = {
             let mut node = self.html.tree.get_mut(id)?;
-            node.insert_before(Node::Element(Element::new(element_qualname(tag), Vec::new())))
-                .id()
+            node.insert_before(Node::Element(Element::new(
+                element_qualname(tag),
+                Vec::new(),
+            )))
+            .id()
         };
         // Move the original under the wrapper.
         {
@@ -608,7 +620,10 @@ mod tests {
         let id = doc.select_ids("p")[0];
         let wrapper = doc.wrap(id, "div").expect("wrapper id");
         let html = doc.serialize();
-        assert!(html.contains("<div><p class=\"c\">Hello</p></div>"), "got: {html}");
+        assert!(
+            html.contains("<div><p class=\"c\">Hello</p></div>"),
+            "got: {html}"
+        );
         assert_eq!(doc.element_name_of(wrapper).as_deref(), Some("div"));
     }
 
@@ -619,7 +634,10 @@ mod tests {
         doc.prepend_child(id, "<span>first</span>");
         doc.append_child(id, "<span>last</span>");
         let html = doc.serialize();
-        assert!(html.contains("<span>first</span><span>last</span>"), "got: {html}");
+        assert!(
+            html.contains("<span>first</span><span>last</span>"),
+            "got: {html}"
+        );
     }
 
     #[test]

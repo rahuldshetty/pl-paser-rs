@@ -15,8 +15,13 @@ use crate::utils::{extract_from_url, normalize_spaces};
 
 // --- title ---
 
-pub const STRONG_TITLE_META_TAGS: [&str; 5] =
-    ["tweetmeme-title", "dc.title", "rbtitle", "headline", "title"];
+pub const STRONG_TITLE_META_TAGS: [&str; 5] = [
+    "tweetmeme-title",
+    "dc.title",
+    "rbtitle",
+    "headline",
+    "title",
+];
 pub const WEAK_TITLE_META_TAGS: [&str; 1] = ["og:title"];
 pub const STRONG_TITLE_SELECTORS: [&str; 6] = [
     ".hentry .entry-title",
@@ -301,17 +306,17 @@ fn score_by_parents(doc: &Doc, id: ego_tree::NodeId) -> f64 {
     }
     for id in [parent, grandparent].into_iter().flatten() {
         if let Some(node) = doc.get(id) {
-                if let Some(element) = node.value().as_element() {
-                    let sig = format!(
-                        "{} {}",
-                        element.attr("class").unwrap_or(""),
-                        element.attr("id").unwrap_or("")
-                    );
-                    if crate::dom_utils::scoring_re::is_photo_hint(&sig) {
-                        score += 15.0;
-                    }
+            if let Some(element) = node.value().as_element() {
+                let sig = format!(
+                    "{} {}",
+                    element.attr("class").unwrap_or(""),
+                    element.attr("id").unwrap_or("")
+                );
+                if crate::dom_utils::scoring_re::is_photo_hint(&sig) {
+                    score += 15.0;
                 }
             }
+        }
     }
     score
 }
@@ -341,7 +346,10 @@ fn score_by_sibling(doc: &Doc, id: ego_tree::NodeId) -> f64 {
 fn score_by_dimensions(el: &scraper::ElementRef<'_>) -> f64 {
     let mut score = 0.0;
     let width = el.value().attr("width").and_then(|w| w.parse::<f64>().ok());
-    let height = el.value().attr("height").and_then(|h| h.parse::<f64>().ok());
+    let height = el
+        .value()
+        .attr("height")
+        .and_then(|h| h.parse::<f64>().ok());
     let src = el.value().attr("src").unwrap_or("");
 
     if let Some(w) = width {
@@ -462,11 +470,15 @@ pub fn extract_url_and_domain(
 
     let meta_url = extract_from_meta(doc, &CANONICAL_META_SELECTORS, meta_cache, false);
     if let Some(u) = meta_url {
-        let domain = Url::parse(&u).ok().and_then(|p| p.host_str().map(|h| h.to_string()));
+        let domain = Url::parse(&u)
+            .ok()
+            .and_then(|p| p.host_str().map(|h| h.to_string()));
         return (Some(u), domain);
     }
 
-    let domain = Url::parse(url).ok().and_then(|p| p.host_str().map(|h| h.to_string()));
+    let domain = Url::parse(url)
+        .ok()
+        .and_then(|p| p.host_str().map(|h| h.to_string()));
     (Some(url.to_string()), domain)
 }
 
@@ -510,7 +522,8 @@ mod tests {
 
     #[test]
     fn author_byline_regex() {
-        let d = Doc::parse_document("<html><body><div id=\"byline\">By John Smith</div></body></html>");
+        let d =
+            Doc::parse_document("<html><body><div id=\"byline\">By John Smith</div></body></html>");
         let cache = d.meta_names();
         assert_eq!(extract_author(&d, &cache).as_deref(), Some("John Smith"));
     }

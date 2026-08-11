@@ -1,9 +1,9 @@
 //! DOM manipulation helpers used by the cleaners and generic extractors,
 //! ported from upstream `src/utils/dom/`.
 
+use ego_tree::NodeId;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use ego_tree::NodeId;
 use url::Url;
 
 use crate::dom::{link_density, Doc};
@@ -32,13 +32,21 @@ pub const STRIP_OUTPUT_TAGS: [&str; 9] = [
 
 /// Attributes kept on output (upstream `WHITELIST_ATTRS`).
 pub const WHITELIST_ATTRS: [&str; 11] = [
-    "src", "srcset", "sizes", "type", "href", "class", "id", "alt", "xlink:href", "width",
+    "src",
+    "srcset",
+    "sizes",
+    "type",
+    "href",
+    "class",
+    "id",
+    "alt",
+    "xlink:href",
+    "width",
     "height",
 ];
 
 static WHITELIST_ATTRS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!("^({})$", WHITELIST_ATTRS.join("|")))
-        .expect("whitelist attrs re")
+    Regex::new(&format!("^({})$", WHITELIST_ATTRS.join("|"))).expect("whitelist attrs re")
 });
 
 /// Tags cleaned conditionally (upstream `CLEAN_CONDITIONALLY_TAGS`).
@@ -61,15 +69,12 @@ static UNLIKELY_CANDIDATES_WHITELIST: Lazy<Regex> = Lazy::new(|| {
     .expect("whitelist re")
 });
 
-static DIV_TO_P_BLOCK_TAGS: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(a|blockquote|dl|div|img|p|pre|table)$").expect("div-to-p tags re")
-});
+static DIV_TO_P_BLOCK_TAGS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^(a|blockquote|dl|div|img|p|pre|table)$").expect("div-to-p tags re"));
 
 static NON_TOP_CANDIDATE_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r"^(br|b|i|label|hr|area|base|basefont|input|img|link|meta)$",
-    )
-    .expect("non-top-candidate re")
+    Regex::new(r"^(br|b|i|label|hr|area|base|basefont|input|img|link|meta)$")
+        .expect("non-top-candidate re")
 });
 
 /// hNews / content-specific selectors given a big score boost.
@@ -163,9 +168,7 @@ pub fn paragraphize_br(doc: &mut Doc, br_id: NodeId) {
 
     // Create a <p> right after the <br>, move the siblings into it.
     if let Some(mut br) = doc.html.tree.get_mut(br_id) {
-        let p = br
-            .insert_after(crate::dom::new_p())
-            .id();
+        let p = br.insert_after(crate::dom::new_p()).id();
         for sib in follow {
             if let Some(mut p_node) = doc.html.tree.get_mut(p) {
                 p_node.append_id(sib);
@@ -297,9 +300,7 @@ pub fn clean_images(doc: &mut Doc, article_id: NodeId) {
         let height = doc
             .attr_of(id, "height")
             .and_then(|h| h.parse::<i64>().ok());
-        let width = doc
-            .attr_of(id, "width")
-            .and_then(|w| w.parse::<i64>().ok());
+        let width = doc.attr_of(id, "width").and_then(|w| w.parse::<i64>().ok());
         let height_or_20 = height.filter(|v| *v != 0).unwrap_or(20);
         let width_or_20 = width.filter(|v| *v != 0).unwrap_or(20);
 
@@ -574,7 +575,11 @@ pub fn strip_tags(text: &str) -> String {
     let wrapped = format!("<span>{text}</span>");
     let doc = Doc::parse_fragment(&wrapped);
     let cleaned = doc.text("span").unwrap_or_default();
-    if cleaned.is_empty() { text.to_string() } else { cleaned }
+    if cleaned.is_empty() {
+        text.to_string()
+    } else {
+        cleaned
+    }
 }
 
 /// True if the node has an ancestor whose class/id contains "comment"
@@ -606,9 +611,12 @@ pub fn node_is_sufficient(doc: &Doc, id: NodeId) -> bool {
 /// True if the doc is a WordPress site (upstream `isWordpress`).
 pub fn is_wordpress(doc: &Doc) -> bool {
     // meta[name=generator][value^=WordPress]
-    doc.select("meta[name=\"generator\"]")
-        .iter()
-        .any(|e| e.value().attr("value").map(|v| v.starts_with("WordPress")).unwrap_or(false))
+    doc.select("meta[name=\"generator\"]").iter().any(|e| {
+        e.value()
+            .attr("value")
+            .map(|v| v.starts_with("WordPress"))
+            .unwrap_or(false)
+    })
 }
 
 /// Add a class to an element (cheerio `addClass`).
@@ -687,7 +695,8 @@ mod tests {
 
     #[test]
     fn strip_unlikely_keeps_whitelisted() {
-        let mut d = doc("<html><body><div class=\"rss-content entry-content\">x</div></body></html>");
+        let mut d =
+            doc("<html><body><div class=\"rss-content entry-content\">x</div></body></html>");
         strip_unlikely_candidates(&mut d);
         assert!(d.serialize().contains("entry-content"));
     }
@@ -742,7 +751,9 @@ mod tests {
 
     #[test]
     fn clean_attributes_whitelists() {
-        let mut d = doc("<html><body><p style=\"x\" align=\"y\" class=\"z\" data-x=\"1\">t</p></body></html>");
+        let mut d = doc(
+            "<html><body><p style=\"x\" align=\"y\" class=\"z\" data-x=\"1\">t</p></body></html>",
+        );
         clean_attributes(&mut d);
         let s = d.serialize();
         assert!(!s.contains("style"));
@@ -753,17 +764,24 @@ mod tests {
 
     #[test]
     fn make_links_absolute_resolves() {
-        let mut d = doc(r#"<html><head></head><body><a href="/rel">x</a><img src="//cdn.example.com/a.png"><img srcset="a.png 1x, b.png 2x"></body></html>"#);
+        let mut d = doc(
+            r#"<html><head></head><body><a href="/rel">x</a><img src="//cdn.example.com/a.png"><img srcset="a.png 1x, b.png 2x"></body></html>"#,
+        );
         make_links_absolute(&mut d, "https://example.com/page");
         let s = d.serialize();
         assert!(s.contains(r#"href="https://example.com/rel""#), "got: {s}");
-        assert!(s.contains(r#"src="https://cdn.example.com/a.png""#), "got: {s}");
+        assert!(
+            s.contains(r#"src="https://cdn.example.com/a.png""#),
+            "got: {s}"
+        );
         assert!(s.contains("https://example.com/a.png 1x"), "got: {s}");
     }
 
     #[test]
     fn extract_from_meta_single_value() {
-        let d = doc(r#"<html><head><meta name="og:title" value="T"><meta name="og:title" value="T2"></head></html>"#);
+        let d = doc(
+            r#"<html><head><meta name="og:title" value="T"><meta name="og:title" value="T2"></head></html>"#,
+        );
         let cache = d.meta_names();
         // conflict: two values -> None
         assert_eq!(extract_from_meta(&d, &["og:title"], &cache, true), None);
@@ -774,7 +792,10 @@ mod tests {
         let d = doc("<html><body><div class=\"author\">Jane</div><div class=\"author\">x</div></body></html>");
         assert_eq!(extract_from_selectors(&d, &[".author"], 1), None);
         let d2 = doc("<html><body><div class=\"author\">Jane</div></body></html>");
-        assert_eq!(extract_from_selectors(&d2, &[".author"], 1).as_deref(), Some("Jane"));
+        assert_eq!(
+            extract_from_selectors(&d2, &[".author"], 1).as_deref(),
+            Some("Jane")
+        );
     }
 
     #[test]

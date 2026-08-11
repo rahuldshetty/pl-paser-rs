@@ -44,7 +44,14 @@ pub fn extract_next_page_url(
         let href = remove_anchor(&href);
         let link_text = doc.text_of(link_id).unwrap_or_default();
 
-        if !should_score(&href, &article_url, &base_url, parsed_url, &link_text, previous_urls) {
+        if !should_score(
+            &href,
+            &article_url,
+            &base_url,
+            parsed_url,
+            &link_text,
+            previous_urls,
+        ) {
             continue;
         }
 
@@ -53,7 +60,11 @@ pub fn extract_next_page_url(
             scored_pages[i].link_text = format!("{}|{}", scored_pages[i].link_text, link_text);
             i
         } else {
-            scored_pages.push(ScoredPage { score: 0.0, link_text: link_text.clone(), href: href.clone() });
+            scored_pages.push(ScoredPage {
+                score: 0.0,
+                link_text: link_text.clone(),
+                href: href.clone(),
+            });
             scored_pages.len() - 1
         };
 
@@ -114,7 +125,9 @@ fn should_score(
         return false;
     }
 
-    let link_host = Url::parse(href).ok().and_then(|u| u.host_str().map(str::to_string));
+    let link_host = Url::parse(href)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string));
     if link_host.as_deref() != parsed_url.host_str() {
         return false;
     }
@@ -136,7 +149,10 @@ fn should_score(
 }
 
 fn score_base_url(href: &str, base_url: &str) -> f64 {
-    if !href.to_ascii_lowercase().starts_with(&base_url.to_ascii_lowercase()) {
+    if !href
+        .to_ascii_lowercase()
+        .starts_with(&base_url.to_ascii_lowercase())
+    {
         return -25.0;
     }
     0.0
@@ -173,8 +189,12 @@ fn score_by_parents(doc: &Doc, link_id: ego_tree::NodeId) -> f64 {
 
     let ancestors = doc.ancestors_of(link_id);
     for ancestor in ancestors.iter().take(5) {
-        let Some(node) = doc.get(*ancestor) else { continue };
-        let Some(element) = node.value().as_element() else { continue };
+        let Some(node) = doc.get(*ancestor) else {
+            continue;
+        };
+        let Some(element) = node.value().as_element() else {
+            continue;
+        };
         let parent_data = format!(
             "{} {}",
             element.attr("class").unwrap_or(""),
@@ -365,8 +385,14 @@ mod tests {
 
     #[test]
     fn base_url_penalty() {
-        assert_eq!(score_base_url("http://foo.com/x", "http://example.com"), -25.0);
-        assert_eq!(score_base_url("http://example.com/x", "http://example.com"), 0.0);
+        assert_eq!(
+            score_base_url("http://foo.com/x", "http://example.com"),
+            -25.0
+        );
+        assert_eq!(
+            score_base_url("http://example.com/x", "http://example.com"),
+            0.0
+        );
     }
 
     #[test]

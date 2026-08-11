@@ -101,7 +101,11 @@ pub async fn fetch_resource(
         .map_err(|e| ParserError::Http(e.to_string()))?
         .to_vec();
 
-    Ok(FetchedResource { body, content_type, content_length })
+    Ok(FetchedResource {
+        body,
+        content_type,
+        content_length,
+    })
 }
 
 /// Validate a response (upstream `validateResponse`).
@@ -355,7 +359,10 @@ mod tests {
         </body></html>"#;
         let doc = generate_doc(html.as_bytes().to_vec(), "text/html", false).unwrap();
         let serialized = doc.serialize();
-        assert!(serialized.contains(r#"src="https://x.com/a.png""#), "{serialized}");
+        assert!(
+            serialized.contains(r#"src="https://x.com/a.png""#),
+            "{serialized}"
+        );
         assert!(serialized.contains("srcset"), "{serialized}");
     }
 

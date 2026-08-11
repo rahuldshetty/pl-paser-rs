@@ -3,7 +3,9 @@
 
 use std::collections::HashMap;
 
-use crate::types::{ContentField, CustomExtractor, DateField, ExtendField, Field, FieldValue, Selector, Transform};
+use crate::types::{
+    ContentField, CustomExtractor, DateField, ExtendField, Field, FieldValue, Selector, Transform,
+};
 
 /// All built-in custom extractors, keyed by domain.
 pub fn all_extractors() -> Vec<CustomExtractor> {

@@ -2,7 +2,7 @@
 //!
 //! These exercise the full generic extraction pipeline on real saved pages.
 
-use postlight_parser::{Parser, ParseOptions};
+use postlight_parser::{ParseOptions, Parser};
 
 fn run_parse(url: &str, html: &str, opts: &ParseOptions) -> postlight_parser::Article {
     tokio::runtime::Builder::new_current_thread()
@@ -61,11 +61,9 @@ fn nytimes_fixture_metadata() {
         Some("2016-09-19T11:46:01.000Z")
     );
     assert!(
-        article
-            .lead_image_url
-            .as_deref()
-            .unwrap_or("")
-            .starts_with("https://static01.nyt.com/images/2016/09/20/nyregion/Manhunt/Manhunt-facebookJumbo"),
+        article.lead_image_url.as_deref().unwrap_or("").starts_with(
+            "https://static01.nyt.com/images/2016/09/20/nyregion/Manhunt/Manhunt-facebookJumbo"
+        ),
         "lead image: {:?}",
         article.lead_image_url
     );
@@ -78,7 +76,11 @@ fn nytimes_fixture_metadata() {
         .first()
         .map(|el| postlight_parser::dom::element_text(*el))
         .unwrap_or_default();
-    let first13 = first_text.split_whitespace().take(13).collect::<Vec<_>>().join(" ");
+    let first13 = first_text
+        .split_whitespace()
+        .take(13)
+        .collect::<Vec<_>>()
+        .join(" ");
     assert_eq!(
         first13,
         "The man who the police said sowed terror across two states, setting off"

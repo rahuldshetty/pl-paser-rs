@@ -17,6 +17,12 @@
 //! 5. **content type conversion** — `html`, `markdown`, or `text`.
 //!
 //! Async (tokio-based) so it drops straight into a Tauri command.
+//!
+//! # Features
+//!
+//! - `fallback` (off by default): use the Rust `readability` crate as a
+//!   last-resort content extractor when the Mercury-style extractor finds
+//!   nothing. Upstream has no readability integration; this is an extension.
 
 pub mod cleaners;
 pub mod content_type;

@@ -81,14 +81,9 @@ impl Parser {
         // Follow next-page chains when requested (upstream `collectAllPages`).
         if opts.fetch_all_pages {
             if let Some(next_page_url) = article.next_page_url.clone() {
-                article = Self::collect_all_pages(
-                    url,
-                    next_page_url,
-                    extractor.as_ref(),
-                    opts,
-                    article,
-                )
-                .await?;
+                article =
+                    Self::collect_all_pages(url, next_page_url, extractor.as_ref(), opts, article)
+                        .await?;
             } else {
                 article.total_pages = Some(1);
                 article.rendered_pages = Some(1);

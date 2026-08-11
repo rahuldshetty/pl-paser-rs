@@ -51,10 +51,16 @@ fn find_in<'a>(
 
 /// Detect an extractor from page HTML (upstream `detectByHtml`).
 pub fn detect_by_html(doc: &Doc) -> Option<CustomExtractor> {
-    if !doc.select("meta[name=\"al:ios:app_name\"][value=\"Medium\"]").is_empty() {
+    if !doc
+        .select("meta[name=\"al:ios:app_name\"][value=\"Medium\"]")
+        .is_empty()
+    {
         return get_extractor("medium.com");
     }
-    if !doc.select("meta[name=\"generator\"][value=\"blogger\"]").is_empty() {
+    if !doc
+        .select("meta[name=\"generator\"][value=\"blogger\"]")
+        .is_empty()
+    {
         return get_extractor("blogspot.com");
     }
     None
@@ -63,9 +69,7 @@ pub fn detect_by_html(doc: &Doc) -> Option<CustomExtractor> {
 /// Register a custom extractor at runtime (upstream `addExtractor`).
 pub fn add_extractor(extractor: CustomExtractor) -> Result<(), String> {
     if extractor.domain.is_empty() {
-        return Err(
-            "Unable to add custom extractor. Invalid parameters.".to_string(),
-        );
+        return Err("Unable to add custom extractor. Invalid parameters.".to_string());
     }
     if let Ok(mut registry) = RUNTIME.write() {
         registry.push(extractor);

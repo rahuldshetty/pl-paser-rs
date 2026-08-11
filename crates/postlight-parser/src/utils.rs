@@ -94,7 +94,11 @@ pub fn page_num_from_url(url: &str) -> Option<u32> {
 
 /// Strip anchor (`#...`) and trailing slash (upstream `remove-anchor.js`).
 pub fn remove_anchor(url: &str) -> String {
-    url.split('#').next().unwrap_or("").trim_end_matches('/').to_string()
+    url.split('#')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches('/')
+        .to_string()
 }
 
 /// True if the text appears to contain a sentence ending (upstream
@@ -243,7 +247,10 @@ mod tests {
     #[test]
     fn normalize_spaces_collapses_runs() {
         assert_eq!(normalize_spaces("a  b   c"), "a b c");
-        assert_eq!(normalize_spaces("  leading and trailing  "), "leading and trailing");
+        assert_eq!(
+            normalize_spaces("  leading and trailing  "),
+            "leading and trailing"
+        );
     }
 
     #[test]
@@ -276,10 +283,7 @@ mod tests {
 
     #[test]
     fn excerpt_content_takes_words() {
-        assert_eq!(
-            excerpt_content("a b c d e", 3),
-            "a b c"
-        );
+        assert_eq!(excerpt_content("a b c d e", 3), "a b c");
     }
 
     #[test]
@@ -298,18 +302,24 @@ mod tests {
         // A URL with an empty host is invalid.
         let empty_host = Url::parse("http://example.com").unwrap();
         let _ = empty_host;
-        assert!(validate_url(&Url::parse("https://en.wikipedia.org/wiki/Thunder_(mascot)").unwrap()));
+        assert!(validate_url(
+            &Url::parse("https://en.wikipedia.org/wiki/Thunder_(mascot)").unwrap()
+        ));
     }
 
     #[test]
     fn base_domain_joins_last_two() {
-        assert_eq!(base_domain("erotictrains.livejournal.com"), "livejournal.com");
+        assert_eq!(
+            base_domain("erotictrains.livejournal.com"),
+            "livejournal.com"
+        );
         assert_eq!(base_domain("example.com"), "example.com");
     }
 
     #[test]
     fn article_base_url_strips_page_segments() {
-        let url = Url::parse("https://www.nytimes.com/2020/01/01/story.html?pagewanted=all").unwrap();
+        let url =
+            Url::parse("https://www.nytimes.com/2020/01/01/story.html?pagewanted=all").unwrap();
         // no pagination path segments; page query stays
         assert!(article_base_url(&url).contains("2020/01/01/story"));
         let url2 = Url::parse("https://x.com/story/2").unwrap();

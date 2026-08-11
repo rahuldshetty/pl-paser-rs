@@ -88,7 +88,8 @@ pub fn extract_content_with(
 fn readability_fallback(html: &str, url: &str) -> Option<String> {
     #[cfg(feature = "fallback")]
     {
-        if let Some(content) = crate::extractors::readability_fallback::readability_content(html, url)
+        if let Some(content) =
+            crate::extractors::readability_fallback::readability_content(html, url)
         {
             return Some(content);
         }
