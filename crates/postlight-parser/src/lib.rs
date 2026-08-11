@@ -18,7 +18,15 @@
 //!
 //! Async (tokio-based) so it drops straight into a Tauri command.
 
+pub mod cleaners;
 pub mod dom;
+pub mod dom_utils;
+pub mod extractors;
+pub mod parser;
 pub mod resource;
 pub mod types;
 pub mod utils;
+
+// Public API re-exports.
+pub use crate::parser::Parser;
+pub use crate::types::{Article, ContentType, ParseOptions, ParserError};

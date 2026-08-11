@@ -114,7 +114,7 @@ pub fn excerpt_content(content: &str, words: usize) -> String {
 
 /// Find the first regex in `regex_list` that matches `url` and return its
 /// capture group 1 (upstream `extract-from-url.js`).
-pub fn extract_from_url(url: &str, regex_list: &[&Regex]) -> Option<String> {
+pub fn extract_from_url(url: &str, regex_list: &[Regex]) -> Option<String> {
     regex_list
         .iter()
         .find(|re| re.is_match(url))

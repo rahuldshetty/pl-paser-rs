@@ -57,6 +57,9 @@ pub struct Article {
     pub direction: Option<String>,
     pub total_pages: Option<u32>,
     pub rendered_pages: Option<u32>,
+    /// Extra keys merged into the output via `extend`.
+    #[serde(flatten)]
+    pub extend: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Options accepted by `Parser::parse`, mirroring upstream `parse(url, opts)`.

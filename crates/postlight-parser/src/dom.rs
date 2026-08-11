@@ -26,6 +26,12 @@ impl Doc {
         Doc { html: Html::parse_fragment(input) }
     }
 
+    /// An empty fragment tree with no children (unlike `parse_fragment("")`,
+    /// which still creates an `<html>` root element).
+    pub fn new_fragment() -> Doc {
+        Doc { html: Html::new_fragment() }
+    }
+
     /// Serialize the whole document.
     pub fn serialize(&self) -> String {
         self.html.html()
@@ -163,6 +169,36 @@ impl Doc {
             None => return Vec::new(),
         };
         node.children().map(|c| c.id()).collect()
+    }
+
+    /// Ids of all descendant elements of `parent` matching a selector.
+    pub fn select_ids_in(&self, parent: NodeId, selector: &str) -> Vec<NodeId> {
+        let Some(node) = self.get(parent) else {
+            return Vec::new();
+        };
+        let Some(el) = ElementRef::wrap(node) else {
+            return Vec::new();
+        };
+        let Ok(sel) = Selector::parse(selector) else {
+            return Vec::new();
+        };
+        el.select(&sel).map(|e| e.id()).collect()
+    }
+
+    pub fn next_sibling(&self, id: NodeId) -> Option<NodeId> {
+        self.get(id).and_then(|n| n.next_sibling().map(|s| s.id()))
+    }
+
+    pub fn prev_sibling(&self, id: NodeId) -> Option<NodeId> {
+        self.get(id).and_then(|n| n.prev_sibling().map(|s| s.id()))
+    }
+
+    /// True if the element at `id` has the given class.
+    pub fn has_class(&self, id: NodeId, class: &str) -> bool {
+        self.get(id)
+            .and_then(|n| n.value().as_element())
+            .map(|e| e.has_class(class, scraper::CaseSensitivity::CaseSensitive))
+            .unwrap_or(false)
     }
 
     pub fn parent_of(&self, id: NodeId) -> Option<NodeId> {
@@ -398,7 +434,7 @@ pub fn element_text(el: ElementRef<'_>) -> String {
 }
 
 /// Deep-clone `source` (a node in another tree) as a child of `parent`.
-fn append_cloned(parent: &mut NodeMut<'_, Node>, source: &NodeRef<'_, Node>) {
+pub fn append_cloned(parent: &mut NodeMut<'_, Node>, source: &NodeRef<'_, Node>) {
     let mut child = parent.append(source.value().clone());
     for gc in source.children() {
         append_cloned(&mut child, &gc);
@@ -429,6 +465,11 @@ fn fragment_sources(fragment: &Html) -> Vec<NodeRef<'_, Node>> {
     top
 }
 
+/// A fresh `<p>` element node (used by `paragraphize`).
+pub fn new_p() -> Node {
+    Node::Element(Element::new(element_qualname("p"), Vec::new()))
+}
+
 /// All attributes of an element as `(name, value)` (upstream `getAttrs`).
 pub fn get_attrs(el: ElementRef<'_>) -> Vec<(String, String)> {
     el.value()
@@ -437,34 +478,52 @@ pub fn get_attrs(el: ElementRef<'_>) -> Vec<(String, String)> {
         .collect()
 }
 
-/// Total length of descendant text of a node (upstream `textLength`).
-pub fn text_length(node: NodeRef<'_, Node>) -> usize {
-    node_text(node).len()
+/// Normalized text length (upstream `textLength`): trimmed with whitespace
+/// runs collapsed to single spaces.
+pub fn text_length(text: &str) -> usize {
+    let mut out = String::with_capacity(text.len());
+    let mut pending_ws = false;
+    for c in text.trim().chars() {
+        if c.is_whitespace() {
+            pending_ws = true;
+            continue;
+        }
+        if pending_ws {
+            out.push(' ');
+            pending_ws = false;
+        }
+        out.push(c);
+    }
+    out.len()
 }
 
 /// Length of text inside descendant `<a>` elements (upstream
 /// `linkTextLength`).
 pub fn link_text_length(node: NodeRef<'_, Node>) -> usize {
-    let mut link_text = 0usize;
+    let mut link_text = String::new();
     for desc in node.descendants() {
         let Some(element) = desc.value().as_element() else {
             continue;
         };
         if element.name().eq_ignore_ascii_case("a") {
-            link_text += node_text(desc).len();
+            link_text.push_str(&node_text(desc));
         }
     }
-    link_text
+    text_length(&link_text)
 }
 
-/// Link density: text inside descendant `<a>` elements over total text
-/// (upstream `linkDensity`).
+/// Link density: normalized text inside descendant `<a>` elements over
+/// normalized total text (upstream `linkDensity`).
 pub fn link_density(node: NodeRef<'_, Node>) -> f64 {
-    let total = text_length(node);
-    if total == 0 {
-        return 0.0;
+    let total = text_length(&node_text(node));
+    let link = link_text_length(node);
+    if total > 0 {
+        link as f64 / total as f64
+    } else if total == 0 && link > 0 {
+        1.0
+    } else {
+        0.0
     }
-    link_text_length(node) as f64 / total as f64
 }
 
 #[cfg(test)]
