@@ -1,0 +1,2 @@
+# Keep formatting predictable across contributors.
+max_width = 100

@@ -1,0 +1,21 @@
+[package]
+name = "postlight-parser-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "mercury-parser-style CLI for postlight-parser"
+
+[lints]
+workspace = true
+
+[dependencies]
+postlight-parser = { path = "../postlight-parser" }
+clap.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "postlight-parser"
+path = "src/main.rs"

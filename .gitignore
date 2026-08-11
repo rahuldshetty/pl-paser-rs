@@ -1,0 +1,5 @@
+# Rust build artifacts
+/target
+
+# Reasonix tool state (kept out of the repo)
+/.reasonix
