@@ -10,7 +10,7 @@ description = "mercury-parser-style CLI for postlight-parser"
 workspace = true
 
 [dependencies]
-postlight-parser = { path = "../postlight-parser" }
+postlight-parser = { path = "../postlight-parser", version = "0.1.0" }
 clap.workspace = true
 anyhow.workspace = true
 tokio.workspace = true

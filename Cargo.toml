@@ -15,8 +15,11 @@ all = "warn"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/postlight/parser-rs"
+repository = "https://github.com/rahuldshetty/pl-paser-rs"
+readme = "../../README.md"
 description = "Extract meaningful content from the chaos of a web page — a Rust port of the Postlight Mercury Parser."
+keywords = ["scraping", "parser", "article", "extractor", "mercury"]
+categories = ["parser-implementations", "web-programming"]
 
 [workspace.dependencies]
 # Async runtime + HTTP (Tauri uses tokio, so this stays compatible)
