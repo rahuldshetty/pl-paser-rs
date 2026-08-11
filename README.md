@@ -17,6 +17,55 @@ everything else.
 | `crates/postlight-parser` | `postlight-parser` | Core library (async, tokio-based) — usable from a Tauri app |
 | `crates/postlight-parser-cli` | `postlight-parser-cli` | `mercury-parser`-style CLI for testing and scripting |
 
+## Prerequisites
+
+- **Rust (stable)** — install with [rustup](https://rustup.rs). The project
+  uses edition 2021 and tracks current stable Rust.
+- **Linux only** — OpenSSL development headers. The HTTP client uses
+  `reqwest`'s default `native-tls` backend:
+  `sudo apt install libssl-dev` (Debian/Ubuntu) or
+  `sudo dnf install openssl-devel` (Fedora).
+  Windows (schannel) and macOS (Security.framework) need no extra system
+  packages.
+
+## Build
+
+```bash
+git clone https://github.com/rahuldshetty/pl-paser-rs.git
+cd parser-rs
+
+# Debug build (library + CLI)
+cargo build
+
+# Optimized release binaries
+cargo build --release
+
+# Optional: enable the `fallback` feature (readability-based last-resort
+# content extraction) for the library
+cargo build -p postlight-parser --features fallback
+```
+
+## Install the CLI
+
+```bash
+cargo install --path crates/postlight-parser-cli
+```
+
+installs the `postlight-parser` binary into `~/.cargo/bin`
+(`%USERPROFILE%\.cargo\bin` on Windows). Run `postlight-parser --help` for all
+options. Without installing, you can run it directly from the workspace with
+`cargo run -p postlight-parser-cli -- <url>`.
+
+## Test
+
+```bash
+cargo test --workspace
+```
+
+Fixture tests run fully offline. The single `#[ignore]`d test in
+`crates/postlight-parser/src/resource.rs` hits a live network endpoint; run it
+with `cargo test --workspace -- --ignored`.
+
 ## Usage (library)
 
 ```rust,ignore
