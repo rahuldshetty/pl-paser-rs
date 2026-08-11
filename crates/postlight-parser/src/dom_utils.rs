@@ -13,7 +13,7 @@ use crate::utils::normalize_spaces;
 pub const KEEP_CLASS: &str = "mercury-parser-keep";
 
 static SPACER_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"transparent|spacer|blank").expect("spacer re"));
+    Lazy::new(|| Regex::new(r"(?i)transparent|spacer|blank").expect("spacer re"));
 
 /// iframes we always want to keep (upstream `KEEP_SELECTORS`).
 pub const KEEP_SELECTORS: [&str; 6] = [
@@ -46,7 +46,7 @@ pub const WHITELIST_ATTRS: [&str; 11] = [
 ];
 
 static WHITELIST_ATTRS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(&format!("^({})$", WHITELIST_ATTRS.join("|"))).expect("whitelist attrs re")
+    Regex::new(&format!("(?i)^({})$", WHITELIST_ATTRS.join("|"))).expect("whitelist attrs re")
 });
 
 /// Tags cleaned conditionally (upstream `CLEAN_CONDITIONALLY_TAGS`).
@@ -57,14 +57,14 @@ pub const HEADER_TAG_LIST: &str = "h2, h3, h4, h5, h6";
 
 static UNLIKELY_CANDIDATES_BLACKLIST: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        "ad-break|adbox|advert|addthis|agegate|aux|blogger-labels|combx|comment|conversation|disqus|entry-unrelated|extra|foot|form|header|hidden|loader|login|menu|meta|nav|pager|pagination|predicta|presence_control_external|popup|printfriendly|related|remove|remark|rss|share|shoutbox|sidebar|sociable|sponsor|tools",
+        "(?i)ad-break|adbox|advert|addthis|agegate|aux|blogger-labels|combx|comment|conversation|disqus|entry-unrelated|extra|foot|form|header|hidden|loader|login|menu|meta|nav|pager|pagination|predicta|presence_control_external|popup|printfriendly|related|remove|remark|rss|share|shoutbox|sidebar|sociable|sponsor|tools",
     )
     .expect("blacklist re")
 });
 
 static UNLIKELY_CANDIDATES_WHITELIST: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        "and|article|body|blogindex|column|content|entry-content-asset|format|hfeed|hentry|hatom|main|page|posts|shadow",
+        "(?i)and|article|body|blogindex|column|content|entry-content-asset|format|hfeed|hentry|hatom|main|page|posts|shadow",
     )
     .expect("whitelist re")
 });
@@ -73,7 +73,7 @@ static DIV_TO_P_BLOCK_TAGS: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^(a|blockquote|dl|div|img|p|pre|table)$").expect("div-to-p tags re"));
 
 static NON_TOP_CANDIDATE_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(br|b|i|label|hr|area|base|basefont|input|img|link|meta)$")
+    Regex::new(r"(?i)^(br|b|i|label|hr|area|base|basefont|input|img|link|meta)$")
         .expect("non-top-candidate re")
 });
 
@@ -88,7 +88,7 @@ pub const HNEWS_CONTENT_SELECTORS: [(&str, &str); 6] = [
 ];
 
 static PHOTO_HINTS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"figure|photo|image|caption").expect("photo hints re"));
+    Lazy::new(|| Regex::new(r"(?i)figure|photo|image|caption").expect("photo hints re"));
 
 static POSITIVE_SCORE_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
@@ -105,17 +105,18 @@ static NEGATIVE_SCORE_RE: Lazy<Regex> = Lazy::new(|| {
 });
 
 static READABILITY_ASSET: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"entry-content-asset").expect("asset re"));
+    Lazy::new(|| Regex::new(r"(?i)entry-content-asset").expect("asset re"));
 
 static PARAGRAPH_SCORE_TAGS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(p|li|span|pre)$").expect("paragraph tags re"));
+    Lazy::new(|| Regex::new(r"(?i)^(p|li|span|pre)$").expect("paragraph tags re"));
 static CHILD_CONTENT_TAGS: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(td|blockquote|ol|ul|dl)$").expect("child content tags re"));
-static BAD_TAGS: Lazy<Regex> = Lazy::new(|| Regex::new(r"^(address|form)$").expect("bad tags re"));
+    Lazy::new(|| Regex::new(r"(?i)^(td|blockquote|ol|ul|dl)$").expect("child content tags re"));
+static BAD_TAGS: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"(?i)^(address|form)$").expect("bad tags re"));
 
 static BLOCK_LEVEL_TAGS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        r"^(article|aside|blockquote|body|br|button|canvas|caption|col|colgroup|dd|div|dl|dt|embed|fieldset|figcaption|figure|footer|form|h1|h2|h3|h4|h5|h6|header|hgroup|hr|li|map|object|ol|output|p|pre|progress|section|table|tbody|textarea|tfoot|th|thead|tr|ul|video)$",
+        r"(?i)^(article|aside|blockquote|body|br|button|canvas|caption|col|colgroup|dd|div|dl|dt|embed|fieldset|figcaption|figure|footer|form|h1|h2|h3|h4|h5|h6|header|hgroup|hr|li|map|object|ol|output|p|pre|progress|section|table|tbody|textarea|tfoot|th|thead|tr|ul|video)$",
     )
     .expect("block tags re")
 });

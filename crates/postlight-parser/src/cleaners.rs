@@ -22,7 +22,7 @@ pub fn clean_author(author: &str) -> String {
 
 // --- dek ---
 
-static TEXT_LINK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"http(s)?://").expect("link re"));
+static TEXT_LINK_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)http(s)?://").expect("link re"));
 
 /// Clean a dek fragment (upstream `cleanDek`).
 pub fn clean_dek(dek: &str, excerpt: Option<&str>) -> Option<String> {
@@ -185,7 +185,12 @@ pub fn ellipsize(text: &str, max_length: usize, ellipse: &str) -> String {
     if text.len() <= max_length {
         return text.to_string();
     }
-    let bound = max_length.min(text.len());
+    // `max_length` is a byte budget; step back to a char boundary so we
+    // never slice mid-UTF-8-char.
+    let mut bound = max_length.min(text.len());
+    while bound > 0 && !text.is_char_boundary(bound) {
+        bound -= 1;
+    }
     match text[..bound].rfind(' ') {
         Some(i) => {
             let mut out = text[..i].trim_end().to_string();
@@ -653,6 +658,15 @@ mod tests {
             ellipsize("one two three four", 10, "&hellip;"),
             "one two&hellip;"
         );
+    }
+
+    #[test]
+    fn ellipsize_handles_multibyte_boundaries() {
+        // byte budget landing mid-char must not panic
+        let text = "héllo wörld éverybody";
+        let out = ellipsize(text, 7, "&hellip;");
+        assert!(out.ends_with("&hellip;"));
+        assert!(out.is_char_boundary(out.len()));
     }
 
     #[test]

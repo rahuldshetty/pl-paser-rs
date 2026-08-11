@@ -184,9 +184,9 @@ pub const DATE_PUBLISHED_SELECTORS: [&str; 17] = [
 
 pub static DATE_PUBLISHED_URL_RES: Lazy<Vec<Regex>> = Lazy::new(|| {
     vec![
-        Regex::new(r"/(20\d{2}/\d{2}/\d{2})/").expect("url date re 1"),
-        Regex::new(r"(20\d{2}-[01]\d-[0-3]\d)").expect("url date re 2"),
-        Regex::new(r"/(20\d{2}/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/[0-3]\d)/")
+        Regex::new(r"(?i)/(20\d{2}/\d{2}/\d{2})/").expect("url date re 1"),
+        Regex::new(r"(?i)(20\d{2}-[01]\d-[0-3]\d)").expect("url date re 2"),
+        Regex::new(r"(?i)/(20\d{2}/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/[0-3]\d)/")
             .expect("url date re 3"),
     ]
 });

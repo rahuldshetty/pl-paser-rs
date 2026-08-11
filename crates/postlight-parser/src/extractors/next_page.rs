@@ -10,16 +10,16 @@ use crate::dom_utils::{is_wordpress, scoring_re};
 use crate::utils::{article_base_url, page_num_from_url, remove_anchor};
 
 static EXTRANEOUS_LINK_HINTS_RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new("print|archive|comment|discuss|e-mail|email|share|reply|all|login|sign|single|adx|entry-unrelated")
+    Regex::new("(?i)print|archive|comment|discuss|e-mail|email|share|reply|all|login|sign|single|adx|entry-unrelated")
         .expect("extraneous re")
 });
 static NEXT_LINK_TEXT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(next|weiter|continue|>([^|]|$)|»([^|]|$))").expect("next re"));
+    Lazy::new(|| Regex::new(r"(?i)(next|weiter|continue|>([^|]|$)|»([^|]|$))").expect("next re"));
 static CAP_LINK_TEXT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(first|last|end)").expect("cap re"));
+    Lazy::new(|| Regex::new(r"(?i)(first|last|end)").expect("cap re"));
 static PREV_LINK_TEXT_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(prev|earl|old|new|<|«)").expect("prev re"));
-static PAGE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"pag(e|ing|inat)").expect("page re"));
+    Lazy::new(|| Regex::new(r"(?i)(prev|earl|old|new|<|«)").expect("prev re"));
+static PAGE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)pag(e|ing|inat)").expect("page re"));
 static DIGIT_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[0-9]").expect("digit re"));
 
 /// Extract the next page URL (upstream `GenericNextPageUrlExtractor.extract`).

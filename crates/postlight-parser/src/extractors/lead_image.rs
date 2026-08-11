@@ -4,16 +4,17 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-static POSITIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new("upload|wp-content|large|photo|wp-image").expect("positive hints re"));
+static POSITIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new("(?i)upload|wp-content|large|photo|wp-image").expect("positive hints re")
+});
 static NEGATIVE_LEAD_IMAGE_URL_HINTS_RE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(
-        "spacer|sprite|blank|throbber|gradient|tile|bg|background|icon|social|header|hdr|advert|spinner|loader|loading|default|rating|share|facebook|twitter|theme|promo|ads|wp-includes",
+        "(?i)spacer|sprite|blank|throbber|gradient|tile|bg|background|icon|social|header|hdr|advert|spinner|loader|loading|default|rating|share|facebook|twitter|theme|promo|ads|wp-includes",
     )
     .expect("negative hints re")
 });
-static GIF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.gif(\?.*)?$").expect("gif re"));
-static JPG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\.jpe?g(\?.*)?$").expect("jpg re"));
+static GIF_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\.gif(\?.*)?$").expect("gif re"));
+static JPG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"(?i)\.jpe?g(\?.*)?$").expect("jpg re"));
 
 /// Score an image URL by its string hints (upstream `scoreImageUrl`).
 pub fn score_image_url(url: &str) -> f64 {
