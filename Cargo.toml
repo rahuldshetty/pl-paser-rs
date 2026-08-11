@@ -21,11 +21,13 @@ description = "Extract meaningful content from the chaos of a web page — a Rus
 [workspace.dependencies]
 # Async runtime + HTTP (Tauri uses tokio, so this stays compatible)
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate"] }
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate", "cookies"] }
 futures = "0.3"
 
 # HTML parsing / querying / serialization
 scraper = "0.27"
+ego-tree = "0.11"
+html5ever = "0.39"
 url = "2"
 regex = "1"
 encoding_rs = "0.8"

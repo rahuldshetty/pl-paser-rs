@@ -17,3 +17,8 @@
 //! 5. **content type conversion** — `html`, `markdown`, or `text`.
 //!
 //! Async (tokio-based) so it drops straight into a Tauri command.
+
+pub mod dom;
+pub mod resource;
+pub mod types;
+pub mod utils;
