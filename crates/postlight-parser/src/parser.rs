@@ -46,8 +46,20 @@ impl Parser {
             previous_urls: vec![url.to_string()],
         };
 
-        let extractor = opts.custom_extractor.as_ref();
-        let mut article = run_extraction(&ctx, extractor);
+        // Extractor selection (upstream `getExtractor`): a caller-supplied
+        // custom extractor is registered like upstream's `addCustomExtractor`,
+        // then runtime + built-in extractors are matched by hostname, with an
+        // HTML-based detector as the last resort before the generic path.
+        let extractor = {
+            if let Some(ex) = &opts.custom_extractor {
+                let _ = crate::extractors::custom::add_extractor(ex.clone());
+            }
+            let host = parsed_url.host_str().unwrap_or("");
+            crate::extractors::custom::get_extractor(host)
+                .or_else(|| crate::extractors::custom::detect_by_html(doc))
+        };
+
+        let mut article = run_extraction(&ctx, extractor.as_ref());
 
         // Merge caller-supplied `extend` fields.
         let extended = select_extended_types(&ctx, &opts.extend);

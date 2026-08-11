@@ -53,6 +53,14 @@ impl SelectResult {
             SelectResult::Multiple(m) => m.into_iter().next(),
         }
     }
+
+    /// True when the result carries no usable value (upstream falsy check).
+    pub fn is_empty(&self) -> bool {
+        match self {
+            SelectResult::Value(v) => v.is_empty(),
+            SelectResult::Multiple(m) => m.is_empty() || m.iter().all(|v| v.is_empty()),
+        }
+    }
 }
 
 /// Run the full extraction (upstream `RootExtractor.extract`), with or
@@ -104,20 +112,21 @@ pub fn extract_generic(ctx: &ExtractContext<'_>) -> Article {
 fn extract_custom(ctx: &ExtractContext<'_>, extractor: &CustomExtractor) -> Article {
     let title = extract_result(ctx, extractor, "title", None)
         .into_value()
+        .filter(|v| !v.is_empty())
         .unwrap_or_else(|| generic::extract_title(ctx.doc, ctx.url, &ctx.meta_cache));
-    let date_published = extract_result(ctx, extractor, "date_published", None).into_value();
-    let author = extract_result(ctx, extractor, "author", None).into_value();
-    let next_page_url = extract_result(ctx, extractor, "next_page_url", None).into_value();
-    let content = extract_result(ctx, extractor, "content", Some(&title)).into_value();
-    let lead_image_url = extract_result(ctx, extractor, "lead_image_url", None).into_value();
-    let excerpt = extract_result(ctx, extractor, "excerpt", None).into_value();
-    let dek = extract_result(ctx, extractor, "dek", excerpt.as_deref()).into_value();
+    let date_published = non_empty(extract_result(ctx, extractor, "date_published", None));
+    let author = non_empty(extract_result(ctx, extractor, "author", None));
+    let next_page_url = non_empty(extract_result(ctx, extractor, "next_page_url", None));
+    let content = non_empty(extract_result(ctx, extractor, "content", Some(&title)));
+    let lead_image_url = non_empty(extract_result(ctx, extractor, "lead_image_url", None));
+    let excerpt = non_empty(extract_result(ctx, extractor, "excerpt", None));
+    let dek = non_empty(extract_result(ctx, extractor, "dek", excerpt.as_deref()));
 
     let word_count = generic::extract_word_count(content.as_deref());
     let direction = generic::extract_direction(&title);
     let (url, domain) = generic::extract_url_and_domain(ctx.doc, ctx.url, &ctx.meta_cache);
 
-    Article {
+    let mut article = Article {
         title: Some(title),
         content,
         author,
@@ -133,7 +142,20 @@ fn extract_custom(ctx: &ExtractContext<'_>, extractor: &CustomExtractor) -> Arti
         total_pages: None,
         rendered_pages: None,
         extend: std::collections::HashMap::new(),
+    };
+
+    // Merge the extractor's own `extend` fields (upstream `selectExtendedTypes`).
+    let extended = select_extended_types(ctx, &extractor.extend);
+    for (key, value) in extended {
+        article.extend.entry(key).or_insert(value);
     }
+
+    article
+}
+
+/// Map a select result to `None` when it carries no usable value.
+fn non_empty(result: SelectResult) -> Option<String> {
+    result.into_value().filter(|v| !v.is_empty())
 }
 
 /// The `extractResult` function: try the custom selector, fall back to the
@@ -147,7 +169,10 @@ fn extract_result(
     let extraction_opts = field_opts(extractor, field);
 
     if let Some(result) = select_for_field(ctx, field, extraction_opts, context_value) {
-        return result;
+        // Empty values are falsy in upstream JS and fall through.
+        if !result.is_empty() {
+            return result;
+        }
     }
 
     if ctx.fallback {
@@ -293,7 +318,7 @@ fn select_html(
             let mut wrapper = Doc::parse_fragment("<div></div>");
             let wrapper_id = wrapper.select_ids("div")[0];
             for s in selectors {
-                for id in wrapper.select_ids(&s) {
+                for id in ctx.doc.select_ids(&s) {
                     if let Some(node) = ctx.doc.get(id) {
                         if let Some(mut w) = wrapper.html.tree.get_mut(wrapper_id) {
                             append_cloned(&mut w, &node);
@@ -329,7 +354,7 @@ fn select_html(
             match transform {
                 Transform::ToTag(tag) => content.convert_node_to(id, tag),
                 Transform::Named(name) => {
-                    if let Some(tag) = transforms::apply_named(&mut content, id, name) {
+                    if let Some(tag) = transforms::apply_named(&mut content, ctx.doc, id, name) {
                         content.convert_node_to(id, &tag);
                     }
                 }
