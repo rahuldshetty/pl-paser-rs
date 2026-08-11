@@ -4,13 +4,28 @@
 
 use postlight_parser::{Parser, ParseOptions};
 
+fn run_parse(url: &str, html: &str, opts: &ParseOptions) -> postlight_parser::Article {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async { Parser::parse_html(url, html, opts).await })
+        .expect("parse ok")
+}
+
 fn parse_fixture(name: &str, url: &str) -> postlight_parser::Article {
     let html = std::fs::read_to_string(format!(
         "{}/tests/fixtures/{name}",
         env!("CARGO_MANIFEST_DIR")
     ))
     .unwrap();
-    Parser::parse_html(url, &html, &ParseOptions::default()).expect("parse ok")
+    // fetch_all_pages is disabled so fixture tests stay offline (pagination is
+    // covered by the live-network ignored test in resource.rs).
+    let opts = ParseOptions {
+        fetch_all_pages: false,
+        ..ParseOptions::default()
+    };
+    run_parse(url, &html, &opts)
 }
 
 fn parse_fixture_no_fallback(name: &str, url: &str) -> postlight_parser::Article {
@@ -23,7 +38,7 @@ fn parse_fixture_no_fallback(name: &str, url: &str) -> postlight_parser::Article
         fallback: false,
         ..ParseOptions::default()
     };
-    Parser::parse_html(url, &html, &opts).expect("parse ok")
+    run_parse(url, &html, &opts)
 }
 
 #[test]

@@ -19,6 +19,7 @@
 //! Async (tokio-based) so it drops straight into a Tauri command.
 
 pub mod cleaners;
+pub mod content_type;
 pub mod dom;
 pub mod dom_utils;
 pub mod extractors;
