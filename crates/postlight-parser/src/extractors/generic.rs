@@ -86,7 +86,7 @@ pub const AUTHOR_META_TAGS: [&str; 7] = [
     "authors",
 ];
 pub const AUTHOR_MAX_LENGTH: usize = 300;
-pub const AUTHOR_SELECTORS: [&str; 22] = [
+pub const AUTHOR_SELECTORS: [&str; 23] = [
     ".entry .entry-author",
     ".author.vcard .fn",
     ".author .vcard .fn",
@@ -109,6 +109,7 @@ pub const AUTHOR_SELECTORS: [&str; 22] = [
     ".author",
     ".articleauthor",
     ".ArticleAuthor",
+    ".byline",
 ];
 
 static BYLINE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[\n\s]*By").expect("byline re"));
@@ -145,7 +146,7 @@ pub fn extract_author(doc: &Doc, meta_cache: &[String]) -> Option<String> {
 
 // --- date_published ---
 
-pub const DATE_PUBLISHED_META_TAGS: [&str; 15] = [
+pub const DATE_PUBLISHED_META_TAGS: [&str; 16] = [
     "article:published_time",
     "displaydate",
     "dc.date",
@@ -161,6 +162,7 @@ pub const DATE_PUBLISHED_META_TAGS: [&str; 15] = [
     "content_create_date",
     "lastmodified",
     "created",
+    "date",
 ];
 pub const DATE_PUBLISHED_SELECTORS: [&str; 17] = [
     ".hentry .dtstamp.published",
@@ -293,17 +295,18 @@ fn score_attr(el: &scraper::ElementRef<'_>) -> f64 {
 fn score_by_parents(doc: &Doc, id: ego_tree::NodeId) -> f64 {
     let mut score = 0.0;
     let ancestors = doc.ancestors_of(id);
+    // Upstream `$img.parents('figure').first()` — *any* ancestor figure.
+    if ancestors.iter().any(|a| {
+        doc.get(*a)
+            .and_then(|n| n.value().as_element())
+            .map(|e| e.name().eq_ignore_ascii_case("figure"))
+            .unwrap_or(false)
+    }) {
+        score += 25.0;
+    }
     let mut iter = ancestors.iter();
     let parent = iter.next().and_then(|p| doc.get(*p)).map(|n| n.id());
     let grandparent = iter.next().copied();
-    let parent_is_figure = parent
-        .and_then(|p| doc.get(p))
-        .and_then(|n| n.value().as_element())
-        .map(|e| e.name().eq_ignore_ascii_case("figure"))
-        .unwrap_or(false);
-    if parent_is_figure {
-        score += 25.0;
-    }
     for id in [parent, grandparent].into_iter().flatten() {
         if let Some(node) = doc.get(id) {
             if let Some(element) = node.value().as_element() {
@@ -323,7 +326,20 @@ fn score_by_parents(doc: &Doc, id: ego_tree::NodeId) -> f64 {
 
 fn score_by_sibling(doc: &Doc, id: ego_tree::NodeId) -> f64 {
     let mut score = 0.0;
-    if let Some(sibling) = doc.next_sibling(id) {
+    // Upstream `$img.next()` returns the next *element* sibling; skip any
+    // whitespace text nodes in between.
+    let mut sibling = doc.next_sibling(id);
+    while let Some(sid) = sibling {
+        let is_elem = doc
+            .get(sid)
+            .map(|n| n.value().is_element())
+            .unwrap_or(false);
+        if is_elem {
+            break;
+        }
+        sibling = doc.next_sibling(sid);
+    }
+    if let Some(sibling) = sibling {
         if let Some(node) = doc.get(sibling) {
             if let Some(element) = node.value().as_element() {
                 if element.name().eq_ignore_ascii_case("figcaption") {
@@ -345,11 +361,15 @@ fn score_by_sibling(doc: &Doc, id: ego_tree::NodeId) -> f64 {
 
 fn score_by_dimensions(el: &scraper::ElementRef<'_>) -> f64 {
     let mut score = 0.0;
-    let width = el.value().attr("width").and_then(|w| w.parse::<f64>().ok());
+    // Upstream uses parseFloat, so `50px` counts as 50.
+    let width = el
+        .value()
+        .attr("width")
+        .and_then(crate::utils::parse_float_leading);
     let height = el
         .value()
         .attr("height")
-        .and_then(|h| h.parse::<f64>().ok());
+        .and_then(crate::utils::parse_float_leading);
     let src = el.value().attr("src").unwrap_or("");
 
     if let Some(w) = width {
@@ -407,19 +427,37 @@ pub fn extract_excerpt(doc: &Doc, content: Option<&str>, meta_cache: &[String]) 
 
 // --- word_count ---
 
-/// Count words in content (upstream `getWordCount`).
+/// Count words in content (upstream `getWordCount` + `getWordCountAlt`).
 pub fn extract_word_count(content: Option<&str>) -> Option<u32> {
     let content = content?;
     let doc = Doc::parse_fragment(content);
     let first_div = doc.select_first("div");
     let text = match first_div {
         Some(el) => element_text(el),
-        None => node_text(doc.html.tree.root()),
+        // Upstream `$('div').first()` on content with no divs is an empty
+        // selection, so `.text()` is `""` → count 1 → the alt path runs.
+        None => String::new(),
     };
     let normalized = normalize_spaces(&text);
     let mut count = normalized.split_whitespace().count() as u32;
     if count == 1 {
-        let stripped = strip_tags(content);
+        // Upstream `getWordCountAlt`: replace every tag with a space
+        // (`/<[^>]*>/g`), collapse whitespace, trim, split on single spaces.
+        let mut stripped = String::with_capacity(content.len());
+        let mut in_tag = false;
+        for c in content.chars() {
+            if in_tag {
+                if c == '>' {
+                    in_tag = false;
+                }
+                continue;
+            }
+            if c == '<' {
+                in_tag = true;
+                continue;
+            }
+            stripped.push(c);
+        }
         let collapsed = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
         count = collapsed.split(' ').count() as u32;
     }
@@ -430,21 +468,65 @@ pub fn extract_word_count(content: Option<&str>) -> Option<u32> {
 
 /// Determine text direction (upstream `stringDirection.getDirection`).
 pub fn extract_direction(title: &str) -> Option<String> {
-    let mut ltr = 0usize;
-    let mut rtl = 0usize;
-    for ch in title.chars() {
-        match unicode_bidi::bidi_class(ch) {
-            unicode_bidi::BidiClass::L => ltr += 1,
-            unicode_bidi::BidiClass::R | unicode_bidi::BidiClass::AL => rtl += 1,
-            _ => {}
+    const LTR_MARK: char = '\u{200e}';
+    const RTL_MARK: char = '\u{200f}';
+
+    if title.is_empty() {
+        return None;
+    }
+    let has_ltr_mark = title.contains(LTR_MARK);
+    let has_rtl_mark = title.contains(RTL_MARK);
+    if has_ltr_mark && has_rtl_mark {
+        return Some("bidi".to_string());
+    }
+    if has_ltr_mark {
+        return Some("ltr".to_string());
+    }
+    if has_rtl_mark {
+        return Some("rtl".to_string());
+    }
+
+    // Script ranges from the upstream package, with its *strictly between*
+    // endpoint semantics (`charCode > from && charCode < to`).
+    const RTL_RANGES: [(u32, u32); 6] = [
+        (0x0591, 0x05fe), // Hebrew
+        (0x0601, 0x06fe), // Arabic
+        (0x07c1, 0x07fe), // NKo
+        (0x0701, 0x074e), // Syriac
+        (0x0781, 0x07be), // Thaana
+        (0x2d31, 0x2d7e), // Tifinagh
+    ];
+    let is_rtl = |c: char| {
+        let cp = c as u32;
+        RTL_RANGES.iter().any(|&(lo, hi)| cp > lo && cp < hi)
+    };
+
+    let has_digit = title.chars().any(|c| c.is_ascii_digit());
+    let mut has_rtl = false;
+    let mut has_ltr = false;
+    for c in title.chars() {
+        // Upstream strips `[\s\n\0\f\t\v'"\-0-9+?!]` before classifying.
+        if c.is_whitespace()
+            || c == '\0'
+            || matches!(c, '\'' | '"' | '-' | '+' | '?' | '!')
+            || c.is_ascii_digit()
+        {
+            continue;
+        }
+        if is_rtl(c) {
+            has_rtl = true;
+        } else {
+            has_ltr = true;
         }
     }
-    if rtl > ltr {
-        Some("rtl".to_string())
-    } else if ltr > rtl {
-        Some("ltr".to_string())
-    } else {
-        None
+    // The LTR probe returns `hasLtr || (!hasRtl && hasDigit)`.
+    let ltr = has_ltr || (!has_rtl && has_digit);
+
+    match (has_rtl, ltr) {
+        (true, true) => Some("bidi".to_string()),
+        (false, true) => Some("ltr".to_string()),
+        (true, false) => Some("rtl".to_string()),
+        (false, false) => None,
     }
 }
 
@@ -572,9 +654,13 @@ mod tests {
 
     #[test]
     fn direction_ltr_and_rtl() {
+        // Port of string-direction: any non-RTL char counts as LTR; a
+        // digits-only string is LTR (hasDigit path); '' is no-direction.
         assert_eq!(extract_direction("Hello world").as_deref(), Some("ltr"));
         assert_eq!(extract_direction("שלום עולם").as_deref(), Some("rtl"));
-        assert_eq!(extract_direction("12345"), None);
+        assert_eq!(extract_direction("12345").as_deref(), Some("ltr"));
+        assert_eq!(extract_direction(""), None);
+        assert_eq!(extract_direction("שלום Hello").as_deref(), Some("bidi"));
     }
 
     #[test]

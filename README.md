@@ -3,12 +3,12 @@
 > 📜 Extract meaningful content from the chaos of a web page.
 
 A Rust port of the [Postlight Mercury Parser](https://github.com/postlight/parser)
-(`@postlight/parser`, v2.2.3). It fetches a web page and extracts the article:
-`title`, `content`, `author`, `date_published`, `lead_image_url`, `dek`,
-`next_page_url`, `url`, `domain`, `excerpt`, `word_count`, `direction`,
-`total_pages`, and `rendered_pages` — with per-site custom extractors
-("connectors") for ~150 known publishers, plus a generic extractor for
-everything else.
+(`@postlight/parser`, tracking upstream `main`). It fetches a web page and
+extracts the article: `title`, `content`, `author`, `date_published`,
+`lead_image_url`, `dek`, `next_page_url`, `url`, `domain`, `excerpt`,
+`word_count`, `direction`, `total_pages`, and `rendered_pages` — with
+per-site custom extractors ("connectors") for every publisher upstream ships
+(143 sites), plus a generic extractor for everything else.
 
 ## Workspace layout
 
@@ -110,14 +110,23 @@ async fn extract(url: String) -> Result<postlight_parser::Article, String> {
 
 ### Custom extractors
 
-~150 built-in extractors are ported from upstream, plus the transform
-functions they rely on. `postlight_parser::extractors::custom::add_extractor`
-registers a runtime extractor; the selector model mirrors the upstream
-schema (`selectors`, `[selector, attr]` pairs, content multi-match arrays,
-`clean`, `transforms`, `date_published.format`/`timezone`,
-`defaultCleaner`, `extend`).
+All 143 upstream site extractors are ported (regenerated from the upstream
+`src/extractors/custom/<domain>/index.js` tree) plus the transform functions
+they rely on. Beyond upstream, the port ships extractors for common blogging
+platforms in `extra_extractors()`: Substack (`*.substack.com`), DEV Community
+(`dev.to`), `m.blog.naver.com` (upstream PR #726), a Medium fallback selector
+(upstream PR #724), and a **WordPress detector** — any page emitting
+`<meta name="generator" content="WordPress…">` gets the WordPress extractor
+(`h1.entry-title`, `.entry-content`, `.author.vcard .fn`, `.entry-date`),
+covering self-hosted WP and WordPress.com on arbitrary domains.
+`postlight_parser::extractors::custom::add_extractor` registers a runtime
+extractor; the selector model mirrors the upstream schema (`selectors`,
+`[selector, attr]` pairs, content multi-match arrays, `clean`, `transforms`,
+`date_published.format`/`timezone`, `defaultCleaner`, `extend`).
 
-Regenerating the built-in table after upstream changes:
+Regenerating the built-in table after upstream changes (the hand-written
+`extra_extractors()` block and the Medium fallback selector are not
+regenerated — port them manually):
 
 ```bash
 python tools/generate_custom_extractors.py \
@@ -140,12 +149,13 @@ postlight-parser --header "Cookie: a=b" --no-fetch-all-pages https://example.com
 
 ## Status
 
-Port of upstream v2.2.3: resource fetching (redirects, charset decoding,
-lazy-image lifting), generic extractor (cleaning/scoring pipeline, all
-metadata fields), all ~150 custom site extractors with their transforms,
-next-page collection, and html/markdown/text output. Upstream has no
-readability integration; the optional `fallback` cargo feature adds one as a
-last-resort content extractor.
+Port of upstream `main` (past v2.2.3): resource fetching (redirects, charset
+decoding, lazy-image lifting), generic extractor (cleaning/scoring pipeline,
+all metadata fields), all upstream custom site extractors with their
+transforms, next-page collection, html/markdown/text output, plus the extra
+blogging-platform extractors described above. Upstream has no readability
+integration; the optional `fallback` cargo feature adds one as a last-resort
+content extractor.
 
 ## License
 

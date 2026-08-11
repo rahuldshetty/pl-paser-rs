@@ -3,10 +3,22 @@
 //! `domain::selector` key and implemented here in Rust, faithfully porting
 //! the upstream JS.
 
+use std::sync::LazyLock;
+
 use ego_tree::NodeId;
 use scraper::ElementRef;
 
 use crate::dom::Doc;
+
+/// Medium embedly thumbnail → YouTube id (`https://i.embed.ly/...i.ytimg.com/vi/<id>/`).
+static MEDIUM_YT_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"https://i\.embed\.ly/.+url=https://i\.ytimg\.com/vi/(\w+)/")
+        .expect("medium yt re")
+});
+
+/// Reddit background-image URL (`url(...)`).
+static REDDIT_BG_RE: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\((.*?)\)").expect("reddit bg re"));
 
 // --- helpers shared by the site transforms --------------------------------
 
@@ -29,9 +41,10 @@ fn decode_uri_component(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() + 1 && i + 2 <= bytes.len() - 1 + 1 {
-            let hex = &s[i + 1..(i + 3).min(s.len())];
-            if let Ok(b) = u8::from_str_radix(hex, 16) {
+        // `%` is ASCII, so i+1 is always a char boundary; only slice when
+        // the whole `%xx` unit is within bounds *and* ends on a boundary.
+        if bytes[i] == b'%' && i + 3 <= bytes.len() && s.is_char_boundary(i + 3) {
+            if let Ok(b) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
                 out.push(b);
                 i += 3;
                 continue;
@@ -106,11 +119,8 @@ pub fn apply(doc: &mut Doc, resource: &Doc, id: NodeId, name: &str) -> Option<St
         "medium.com::iframe" => {
             let thumb = doc.attr_of(id, "data-thumbnail").unwrap_or_default();
             let thumb = decode_uri_component(&thumb);
-            let yt_re =
-                regex::Regex::new(r"https://i\.embed\.ly/.+url=https://i\.ytimg\.com/vi/(\w+)/")
-                    .expect("medium yt re");
             let figure = first_ancestor_matching(doc, id, "figure");
-            if let Some(caps) = yt_re.captures(&thumb) {
+            if let Some(caps) = MEDIUM_YT_RE.captures(&thumb) {
                 let youtube_id = &caps[1];
                 doc.set_attr(
                     id,
@@ -150,7 +160,10 @@ pub fn apply(doc: &mut Doc, resource: &Doc, id: NodeId, name: &str) -> Option<St
             None
         }
         "medium.com::img" => {
-            let width = doc.attr_of(id, "width").and_then(|w| w.parse::<i64>().ok());
+            // Upstream: `parseInt(width, 10) < 100` — `48px` counts as 48.
+            let width = doc
+                .attr_of(id, "width")
+                .and_then(|w| crate::utils::parse_int_leading(&w));
             if width.is_some_and(|w| w < 100) {
                 doc.remove(&[id]);
             }
@@ -438,8 +451,7 @@ pub fn apply(doc: &mut Doc, resource: &Doc, id: NodeId, name: &str) -> Option<St
             let imgs = doc.select_ids_in(id, "img");
             let bg = doc.attr_of(id, "style").unwrap_or_default();
             if imgs.len() == 1 && !bg.is_empty() {
-                let re = regex::Regex::new(r"\((.*?)\)").expect("bg re");
-                if let Some(caps) = re.captures(&bg) {
+                if let Some(caps) = REDDIT_BG_RE.captures(&bg) {
                     let cleaned = caps[1].trim_matches(|c| c == '\'' || c == '"').to_string();
                     doc.set_attr(imgs[0], "src", &cleaned);
                     return Some("img".to_string());
@@ -493,6 +505,51 @@ pub fn apply(doc: &mut Doc, resource: &Doc, id: NodeId, name: &str) -> Option<St
             None
         }
 
+        // nymag.com: convert lazy-loaded noscript images to figures. scraper
+        // (scripting-enabled) parses noscript content as raw text, so parse
+        // the text and check for a single `<img>` (upstream `$node.children()`).
+        "nymag.com::noscript" => {
+            let raw = doc.text_of(id).unwrap_or_default();
+            if raw.trim().is_empty() {
+                return None;
+            }
+            let fragment = Doc::parse_fragment(&raw);
+            // `*` matches the synthetic `<html>` wrapper first, then children.
+            let els = fragment.select_ids("*");
+            let body = els.get(1..).unwrap_or(&[]);
+            if body.len() == 1
+                && fragment
+                    .element_name_of(body[0])
+                    .map(|n| n.eq_ignore_ascii_case("img"))
+                    .unwrap_or(false)
+            {
+                if let Some(img_html) = fragment.html_of(body[0]) {
+                    doc.replace_inner_html(id, &img_html);
+                    return Some("figure".to_string());
+                }
+            }
+            None
+        }
+
+        // twitter.com: rewrite the page to a tweet container (upstream
+        // `.permalink[role=main]` transform): collect every `.tweet`, drop
+        // everything else.
+        "twitter.com::.permalink[role=main]" => {
+            let tweets = doc.select_ids_in(id, ".tweet");
+            let mut inner = String::new();
+            for t in &tweets {
+                if let Some(html) = doc.html_of(*t) {
+                    inner.push_str(&html);
+                }
+            }
+            replace_with_html(
+                doc,
+                id,
+                &format!("<div id=\"TWEETS_GO_HERE\">{inner}</div>"),
+            );
+            None
+        }
+
         // www.youtube.com: replace players with embeds.
         "www.youtube.com::#player-api" => {
             let video_id = resource.attr("meta[itemProp=\"videoId\"]", "value");
@@ -526,3 +583,60 @@ pub fn apply(doc: &mut Doc, resource: &Doc, id: NodeId, name: &str) -> Option<St
 
 #[allow(dead_code)]
 fn _keep(_: &Doc, _: ElementRef<'_>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Apply a named transform to every node matching `selector` and return
+    /// the serialized doc plus the last returned tag. Mirrors root.rs: a
+    /// returned tag is applied via `convert_node_to`.
+    fn apply_all(name: &str, selector: &str, html: &str) -> (String, Option<String>) {
+        let mut doc = Doc::parse_fragment(html);
+        let resource = Doc::parse_fragment("");
+        let mut last_tag = None;
+        for id in doc.select_ids(selector) {
+            last_tag = apply(&mut doc, &resource, id, name);
+            if let Some(tag) = &last_tag {
+                doc.convert_node_to(id, tag);
+            }
+        }
+        (doc.serialize(), last_tag)
+    }
+
+    #[test]
+    fn nymag_noscript_becomes_figure() {
+        let (html, tag) = apply_all(
+            "nymag.com::noscript",
+            "noscript",
+            r#"<body><noscript><img src="https://example.com/x.jpg"></noscript></body>"#,
+        );
+        assert_eq!(tag.as_deref(), Some("figure"));
+        assert!(html.contains("<figure>"), "got: {html}");
+        assert!(html.contains("https://example.com/x.jpg"), "got: {html}");
+    }
+
+    #[test]
+    fn nymag_noscript_without_img_untouched() {
+        let (html, tag) = apply_all(
+            "nymag.com::noscript",
+            "noscript",
+            r#"<body><noscript><iframe src="https://googletagmanager.com/x"></iframe></noscript></body>"#,
+        );
+        assert_eq!(tag, None);
+        assert!(html.contains("noscript"), "got: {html}");
+    }
+
+    #[test]
+    fn twitter_permalink_rewrites_to_tweet_container() {
+        let (html, _) = apply_all(
+            "twitter.com::.permalink[role=main]",
+            ".permalink[role=main]",
+            r#"<body><div class="permalink" role="main"><div class="stream-item-footer">junk</div><div class="tweet"><p class="tweet-text">hello</p></div><button>Follow</button></div></body>"#,
+        );
+        assert!(html.contains(r#"<div id="TWEETS_GO_HERE">"#), "got: {html}");
+        assert!(html.contains("tweet-text"), "got: {html}");
+        assert!(!html.contains("stream-item-footer"), "got: {html}");
+        assert!(!html.contains("<button>"), "got: {html}");
+    }
+}

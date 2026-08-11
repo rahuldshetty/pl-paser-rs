@@ -187,8 +187,21 @@ pub fn brs_to_ps(doc: &mut Doc) {
     let br_ids: Vec<NodeId> = doc.select_ids("br");
     let mut collapsing = false;
     for id in br_ids {
-        let next_is_br = doc
-            .next_sibling(id)
+        // Cheerio's `next()` returns only element siblings; whitespace text
+        // nodes between the `<br>`s must be skipped (upstream compares
+        // `nextElement.tagName === 'br'`).
+        let mut next = doc.next_sibling(id);
+        while let Some(nid) = next {
+            let is_elem = doc
+                .get(nid)
+                .map(|n| n.value().is_element())
+                .unwrap_or(false);
+            if is_elem {
+                break;
+            }
+            next = doc.next_sibling(nid);
+        }
+        let next_is_br = next
             .and_then(|s| doc.get(s))
             .and_then(|n| n.value().as_element())
             .map(|e| e.name().eq_ignore_ascii_case("br"))
@@ -298,10 +311,14 @@ pub fn rewrite_top_level(doc: &mut Doc) {
 pub fn clean_images(doc: &mut Doc, article_id: NodeId) {
     let img_ids: Vec<NodeId> = doc.select_ids_in(article_id, "img");
     for id in img_ids {
+        // Upstream parses dimensions with `parseInt(..., 10)`, so `8px`
+        // counts as 8.
         let height = doc
             .attr_of(id, "height")
-            .and_then(|h| h.parse::<i64>().ok());
-        let width = doc.attr_of(id, "width").and_then(|w| w.parse::<i64>().ok());
+            .and_then(|h| crate::utils::parse_int_leading(&h));
+        let width = doc
+            .attr_of(id, "width")
+            .and_then(|w| crate::utils::parse_int_leading(&w));
         let height_or_20 = height.filter(|v| *v != 0).unwrap_or(20);
         let width_or_20 = width.filter(|v| *v != 0).unwrap_or(20);
 
@@ -463,31 +480,33 @@ pub fn clean_attributes(doc: &mut Doc) {
 }
 
 /// Make `href`/`src`/`srcset` attributes absolute (upstream
-/// `makeLinksAbsolute`).
-pub fn make_links_absolute(doc: &mut Doc, url: &str) {
-    let base = doc
-        .attr("base", "href")
-        .filter(|b| !b.is_empty())
-        .unwrap_or_else(|| url.to_string());
+/// `makeLinksAbsolute`). `base_url` is the full document's `<base href>`
+/// (upstream reads `$('base').attr('href')` from the *full* document, which
+/// is never present in the extracted content fragment). `href`/`src` resolve
+/// against `base_url` when set, else `url`; `srcset` always resolves against
+/// `url` (upstream behavior).
+pub fn make_links_absolute(doc: &mut Doc, url: &str, base_url: Option<&str>) {
+    let base = base_url.filter(|b| !b.is_empty()).unwrap_or(url);
 
     for attr in ["href", "src"] {
         let ids = doc.select_ids(&format!("[{attr}]"));
         for id in ids {
             if let Some(value) = doc.attr_of(id, attr) {
-                if let Ok(resolved) = Url::parse(&base).and_then(|b| b.join(&value)) {
+                if let Ok(resolved) = Url::parse(base).and_then(|b| b.join(&value)) {
                     doc.set_attr(id, attr, resolved.as_str());
                 }
             }
         }
     }
 
-    // srcset: resolve each candidate URL and dedupe.
+    // srcset: resolve each candidate URL and dedupe. Upstream resolves
+    // srcset against the page URL, not `<base>`.
     let srcset_ids = doc.select_ids("[srcset]");
     for id in srcset_ids {
         let Some(value) = doc.attr_of(id, "srcset") else {
             continue;
         };
-        let Ok(base_url) = Url::parse(&base) else {
+        let Ok(base) = Url::parse(url) else {
             continue;
         };
         let candidates: Vec<&str> = value.split(',').map(|c| c.trim()).collect();
@@ -496,7 +515,7 @@ pub fn make_links_absolute(doc: &mut Doc, url: &str) {
             let mut parts = candidate.split_whitespace();
             let url_part = parts.next().unwrap_or("");
             let descriptor = parts.collect::<Vec<_>>().join(" ");
-            if let Ok(abs) = base_url.join(url_part) {
+            if let Ok(abs) = base.join(url_part) {
                 let mut entry = abs.to_string();
                 if !descriptor.is_empty() {
                     entry.push(' ');
@@ -707,8 +726,19 @@ mod tests {
         let mut d = doc("<html><body><p>a<br><br>b<br>c</p></body></html>");
         brs_to_ps(&mut d);
         let s = d.serialize();
-        // Serialized literally (nested <p>), matching upstream cheerio output.
-        assert!(s.contains("<p>a<p>b</p><br>c</p>"), "got: {s}");
+        // Cheerio `next()` skips text nodes, so `<br><br>` collapses across
+        // the "b" text; the final `<br>` paragraphizes the trailing "c"
+        // (nested <p> serialized literally, matching upstream cheerio).
+        assert!(s.contains("<p>ab<p>c</p></p>"), "got: {s}");
+    }
+
+    #[test]
+    fn brs_to_ps_collapses_across_text() {
+        let mut d = doc("<html><body><p>a<br>\n<br>b</p></body></html>");
+        brs_to_ps(&mut d);
+        let s = d.serialize();
+        // Whitespace text node between the brs is skipped (upstream next()).
+        assert!(!s.contains("<br>"), "got: {s}");
     }
 
     #[test]
@@ -768,13 +798,33 @@ mod tests {
         let mut d = doc(
             r#"<html><head></head><body><a href="/rel">x</a><img src="//cdn.example.com/a.png"><img srcset="a.png 1x, b.png 2x"></body></html>"#,
         );
-        make_links_absolute(&mut d, "https://example.com/page");
+        make_links_absolute(&mut d, "https://example.com/page", None);
         let s = d.serialize();
         assert!(s.contains(r#"href="https://example.com/rel""#), "got: {s}");
         assert!(
             s.contains(r#"src="https://cdn.example.com/a.png""#),
             "got: {s}"
         );
+        assert!(s.contains("https://example.com/a.png 1x"), "got: {s}");
+    }
+
+    #[test]
+    fn make_links_absolute_uses_base_and_url_for_srcset() {
+        let mut d = doc(
+            r#"<html><head><base href="https://cdn.example.com/"></head><body><a href="/rel">x</a><img srcset="a.png 1x"></body></html>"#,
+        );
+        make_links_absolute(
+            &mut d,
+            "https://example.com/page",
+            Some("https://cdn.example.com/"),
+        );
+        let s = d.serialize();
+        // href/src resolve against `<base>`.
+        assert!(
+            s.contains(r#"href="https://cdn.example.com/rel""#),
+            "got: {s}"
+        );
+        // srcset resolves against the page URL (upstream behavior).
         assert!(s.contains("https://example.com/a.png 1x"), "got: {s}");
     }
 

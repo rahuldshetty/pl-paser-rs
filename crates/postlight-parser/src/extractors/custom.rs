@@ -63,6 +63,15 @@ pub fn detect_by_html(doc: &Doc) -> Option<CustomExtractor> {
     {
         return get_extractor("blogspot.com");
     }
+    if !doc
+        .select("meta[name=\"generator\"][value^=\"WordPress\"]")
+        .is_empty()
+    {
+        // Self-hosted WordPress and WordPress.com both emit a generator tag
+        // (`WordPress 6.x` / `WordPress.com`). Matches any host, so the
+        // extractor is keyed by the synthetic `wordpress.org` domain.
+        return get_extractor("wordpress.org");
+    }
     None
 }
 
@@ -125,5 +134,39 @@ mod tests {
         );
         let ex = detect_by_html(&doc).expect("blogspot");
         assert_eq!(ex.domain, "blogspot.com");
+    }
+
+    #[test]
+    fn detects_wordpress_by_generator_tag() {
+        // WordPress.com
+        let wpcom = Doc::parse_document(
+            r#"<html><head><meta name="generator" value="WordPress.com"></head><body></body></html>"#,
+        );
+        let ex = detect_by_html(&wpcom).expect("wpcom");
+        assert_eq!(ex.domain, "wordpress.org");
+
+        // Self-hosted WordPress
+        let wp = Doc::parse_document(
+            r#"<html><head><meta name="generator" value="WordPress 6.4.2"></head><body></body></html>"#,
+        );
+        let ex = detect_by_html(&wp).expect("wp");
+        assert_eq!(ex.domain, "wordpress.org");
+
+        // Not WordPress → no extractor.
+        let other = Doc::parse_document(
+            r#"<html><head><meta name="generator" value="Jekyll"></head><body></body></html>"#,
+        );
+        assert!(detect_by_html(&other).is_none());
+    }
+
+    #[test]
+    fn new_blogging_platforms_resolve() {
+        // All `*.substack.com` match via base domain.
+        let sub = get_extractor("casualarchivist.substack.com").expect("substack");
+        assert_eq!(sub.domain, "substack.com");
+        assert!(get_extractor("substack.com").is_some());
+
+        let dev = get_extractor("dev.to").expect("dev.to");
+        assert_eq!(dev.domain, "dev.to");
     }
 }

@@ -32,7 +32,6 @@ tracing.workspace = true
 once_cell.workspace = true
 
 strsim.workspace = true
-unicode-bidi.workspace = true
 
 # Optional: `fallback` feature — readability-based content extraction
 # used when the Mercury-style extractor produces no content

@@ -106,8 +106,18 @@ fn get_content_node(
     default_cleaner: bool,
 ) -> Option<Doc> {
     let mut source = Doc::parse_document(html);
+    // `<base href>` lives in the full document, which is gone once we
+    // extract the content fragment (upstream reads it from `$`).
+    let base = source.attr("base", "href");
     let (mut content, article_id) = extract_best_node(&mut source, opts)?;
-    clean_content(&mut content, article_id, title, url, default_cleaner);
+    clean_content(
+        &mut content,
+        article_id,
+        title,
+        url,
+        default_cleaner,
+        base.as_deref(),
+    );
     Some(content)
 }
 
@@ -163,9 +173,9 @@ fn extract_best_node(source: &mut Doc, opts: ContentOptions) -> Option<(Doc, Nod
                     }
                 }
             }
-            // Move the wrapper doc into `content` and return its id.
-            let wrapper_id = wrapper_doc.html.tree.root().last_child()?.id();
-            let wrapper_node = wrapper_doc.html.tree.get(wrapper_id)?;
+            // Move the wrapper div (not the synthetic fragment `<html>`
+            // element) into `content` and return its id.
+            let wrapper_node = wrapper_doc.html.tree.get(wrapper)?;
             let mut content_root = content.html.tree.root_mut();
             append_cloned(&mut content_root, &wrapper_node);
             let child = content_root.last_child()?;
@@ -176,13 +186,15 @@ fn extract_best_node(source: &mut Doc, opts: ContentOptions) -> Option<(Doc, Nod
     Some((content, article_id))
 }
 
-/// Clean the extracted content node (upstream `cleanContent`).
+/// Clean the extracted content node (upstream `cleanContent`). `base_url`
+/// is the full document's `<base href>`, used for resolving relative links.
 pub fn clean_content(
     content: &mut Doc,
     article_id: NodeId,
     title: &str,
     url: &str,
     default_cleaner: bool,
+    base_url: Option<&str>,
 ) {
     rewrite_top_level(content);
 
@@ -192,7 +204,7 @@ pub fn clean_content(
         clean_images(content, article_id);
     }
 
-    make_links_absolute(content, url);
+    make_links_absolute(content, url, base_url);
 
     mark_to_keep(content, article_id, url);
 

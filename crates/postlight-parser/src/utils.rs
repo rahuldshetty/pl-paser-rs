@@ -28,28 +28,50 @@ pub const DEFAULT_ENCODING: &str = "utf-8";
 
 /// Collapse runs of whitespace outside `<pre>/<code>/<textarea>` and trim.
 /// Port of upstream `normalize-spaces.js`.
+/// Collapse runs of whitespace outside `<pre>/<code>/<textarea>` and trim.
+/// Port of upstream `normalize-spaces.js` (`\s{2,}(?![^<>]*<\/(pre|code|textarea)>)`):
+/// only runs of 2+ whitespace are collapsed; lone whitespace is kept verbatim.
 pub fn normalize_spaces(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    let mut pending_ws = false;
+    // Pending whitespace run outside preserve tags: its length and the last
+    // char (kept verbatim when the run is length 1, like upstream).
+    let mut ws_run = 0usize;
+    let mut ws_char = ' ';
     let mut chars = text.chars().peekable();
     // Track whether we are inside one of the whitespace-preserving tags.
     let mut in_preserve = 0u32;
 
+    macro_rules! flush_ws {
+        () => {
+            if ws_run >= 2 {
+                out.push(' ');
+            } else if ws_run == 1 {
+                out.push(ws_char);
+            }
+            ws_run = 0;
+        };
+    }
+
     while let Some(c) = chars.next() {
         // Detect <pre / <code / <textarea open tags (case-insensitive).
         if c == '<' {
-            // Flush any pending whitespace before the tag.
-            if pending_ws {
-                out.push(' ');
-                pending_ws = false;
-            }
+            flush_ws!();
             // Find the end of the tag to determine what it is.
             let mut rest = String::new();
+            let mut closed = false;
             for nc in chars.by_ref() {
                 if nc == '>' {
+                    closed = true;
                     break;
                 }
                 rest.push(nc);
+            }
+            if !closed {
+                // No closing `>`: not a real tag (e.g. "5 < 3"); emit
+                // verbatim instead of fabricating a `>`.
+                out.push('<');
+                out.push_str(&rest);
+                continue;
             }
             let tag = rest.trim().to_ascii_lowercase();
             let closing = tag.starts_with('/');
@@ -70,14 +92,12 @@ pub fn normalize_spaces(text: &str) -> String {
         }
 
         if in_preserve == 0 && c.is_whitespace() {
-            pending_ws = true;
+            ws_run += 1;
+            ws_char = c;
             continue;
         }
 
-        if pending_ws {
-            out.push(' ');
-            pending_ws = false;
-        }
+        flush_ws!();
         out.push(c);
     }
 
@@ -92,6 +112,77 @@ pub fn page_num_from_url(url: &str) -> Option<u32> {
     (page_num < 100).then_some(page_num)
 }
 
+/// Parse a leading integer like JS `parseInt(s, 10)`: optional sign and
+/// leading digits, ignoring trailing garbage (`"8px"` → `8`, `"12.5"` → `12`).
+pub fn parse_int_leading(s: &str) -> Option<i64> {
+    let s = s.trim_start();
+    let (neg, rest) = match s.strip_prefix('-') {
+        Some(r) => (true, r),
+        None => (false, s.strip_prefix('+').unwrap_or(s)),
+    };
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    let mut v: i64 = digits.parse().ok()?;
+    if neg {
+        v = -v;
+    }
+    Some(v)
+}
+
+/// Parse a leading float like JS `parseFloat` (`"8.5px"` → `8.5`,
+/// `".5"` → `0.5`, `"1e3"` → `1000`).
+pub fn parse_float_leading(s: &str) -> Option<f64> {
+    let s = s.trim_start();
+    let bytes = s.as_bytes();
+    let mut end = 0usize;
+    if end < bytes.len() && (bytes[end] == b'+' || bytes[end] == b'-') {
+        end += 1;
+    }
+    let mut seen_digit = false;
+    while end < bytes.len() && bytes[end].is_ascii_digit() {
+        seen_digit = true;
+        end += 1;
+    }
+    if !seen_digit {
+        // `.5` — a leading dot before any digits.
+        if end < bytes.len() && bytes[end] == b'.' {
+            let mut j = end + 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                seen_digit = true;
+                j += 1;
+            }
+            if !seen_digit {
+                return None;
+            }
+            end = j;
+        } else {
+            return None;
+        }
+    } else if end < bytes.len() && bytes[end] == b'.' {
+        end += 1;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+    }
+    // Optional exponent (`1e3`, `1.5e-2`).
+    if end < bytes.len() && (bytes[end] == b'e' || bytes[end] == b'E') {
+        let mut j = end + 1;
+        if j < bytes.len() && (bytes[j] == b'+' || bytes[j] == b'-') {
+            j += 1;
+        }
+        let exp_start = j;
+        while j < bytes.len() && bytes[j].is_ascii_digit() {
+            j += 1;
+        }
+        if j > exp_start {
+            end = j;
+        }
+    }
+    s[..end].parse::<f64>().ok()
+}
+
 /// Strip anchor (`#...`) and trailing slash (upstream `remove-anchor.js`).
 pub fn remove_anchor(url: &str) -> String {
     url.split('#')
@@ -102,9 +193,25 @@ pub fn remove_anchor(url: &str) -> String {
 }
 
 /// True if the text appears to contain a sentence ending (upstream
-/// `has-sentence-end.js`): any period followed by a space or end of string.
+/// `has-sentence-end.js`). The upstream regex `/.( |$)/` matches any
+/// character except line terminators followed by a space or end-of-input;
+/// because the regex engine can start at any position, this is true for
+/// almost every non-empty string (only all-line-terminator text fails).
 pub fn has_sentence_end(text: &str) -> bool {
-    text.contains(". ") || text.trim_end().ends_with('.')
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        // JS `.` matches anything but \n, \r, U+2028, U+2029.
+        if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+            continue;
+        }
+        match chars.peek() {
+            // `( |$)` — a space, or end of input.
+            None => return true,
+            Some(' ') => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 /// First `words` whitespace-separated words (upstream `excerpt-content.js`).
@@ -207,10 +314,10 @@ pub fn article_base_url(url: &Url) -> String {
     for (index, raw_segment) in path.split('/').rev().enumerate() {
         let mut segment = raw_segment.to_string();
 
-        // Split off anything that looks like a file extension.
-        if let Some(dot) = segment.rfind('.') {
-            let (possible, file_ext) = segment.split_at(dot);
-            let file_ext = &file_ext[1..];
+        // Split off anything that looks like a file extension. Upstream
+        // takes the first dot-split pair (`segment.split('.')`), so
+        // `story.amp.html` reduces to `story`, not `story.amp`.
+        if let Some((possible, file_ext)) = segment.split_once('.') {
             if IS_ALPHA_RE.is_match(file_ext) {
                 segment = possible.to_string();
             }
@@ -275,10 +382,15 @@ mod tests {
     }
 
     #[test]
-    fn has_sentence_end_detects_period() {
+    fn has_sentence_end_matches_upstream_regex() {
+        // Upstream /.( |$)/ matches any non-empty string (any char followed
+        // by a space or end-of-input); only all-line-terminator text fails.
         assert!(has_sentence_end("Hello world."));
         assert!(has_sentence_end("Hello world. More"));
-        assert!(!has_sentence_end("Hello world"));
+        assert!(has_sentence_end("Hello world"));
+        assert!(has_sentence_end("a"));
+        assert!(!has_sentence_end(""));
+        assert!(!has_sentence_end("\n"));
     }
 
     #[test]

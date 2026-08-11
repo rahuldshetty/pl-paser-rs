@@ -5526,5 +5526,179 @@ pub fn extra_extractors() -> Vec<CustomExtractor> {
             }),
             extend: HashMap::new(),
         },
+        // Substack: newsletter/blog platform, all `*.substack.com` (base-domain
+        // match), plus OpenSubstack-hosted custom domains via HTML detection.
+        CustomExtractor {
+            domain: "substack.com".into(),
+            supported_domains: vec![],
+            title: Some(Field {
+                selectors: vec![
+                    Selector::Css("h1.post-title".into()),
+                    Selector::Css("h1.post-header-title".into()),
+                    Selector::Css("h1".into()),
+                ],
+            }),
+            author: Some(FieldValue::Selectors(Field {
+                selectors: vec![
+                    Selector::Css("a[href*=\"substack.com/@\"]".into()),
+                    Selector::Css(".byline-wrapper a".into()),
+                    Selector::Css(".comment-author-name".into()),
+                ],
+            })),
+            date_published: Some(DateField {
+                selectors: vec![Selector::Attr {
+                    selector: "time[datetime]".into(),
+                    attr: "datetime".into(),
+                    transform: None,
+                }],
+                format: None,
+                timezone: None,
+            }),
+            lead_image_url: Some(Field {
+                selectors: vec![Selector::Attr {
+                    selector: "meta[name=\"og:image\"]".into(),
+                    attr: "value".into(),
+                    transform: None,
+                }],
+            }),
+            dek: Some(Field {
+                selectors: vec![
+                    Selector::Css(".subtitle".into()),
+                    Selector::Css("meta[name=\"description\"]".into()),
+                ],
+            }),
+            excerpt: None,
+            next_page_url: None,
+            content: Some(ContentField {
+                selectors: vec![
+                    Selector::Css(".body.markup".into()),
+                    Selector::Css(".available-content".into()),
+                    Selector::Css("article".into()),
+                ],
+                clean: vec![
+                    ".subscription-widget-wrap".into(),
+                    ".paywall".into(),
+                    ".post-cta".into(),
+                ],
+                transforms: vec![],
+                default_cleaner: true,
+            }),
+            extend: HashMap::new(),
+        },
+        // DEV Community: developer blogging platform.
+        CustomExtractor {
+            domain: "dev.to".into(),
+            supported_domains: vec![],
+            title: Some(Field {
+                selectors: vec![Selector::Css("#main-title h1".into())],
+            }),
+            author: Some(FieldValue::Selectors(Field {
+                selectors: vec![
+                    Selector::Css(".crayons-article__header__meta a.crayons-link.fw-bold".into()),
+                    Selector::Css(".crayons-article__header__meta a[href^=\"/\"]".into()),
+                ],
+            })),
+            date_published: Some(DateField {
+                selectors: vec![Selector::Attr {
+                    selector: "time[datetime]".into(),
+                    attr: "datetime".into(),
+                    transform: None,
+                }],
+                format: None,
+                timezone: None,
+            }),
+            lead_image_url: Some(Field {
+                selectors: vec![Selector::Attr {
+                    selector: "meta[name=\"og:image\"]".into(),
+                    attr: "value".into(),
+                    transform: None,
+                }],
+            }),
+            dek: None,
+            excerpt: None,
+            next_page_url: None,
+            content: Some(ContentField {
+                selectors: vec![
+                    Selector::Css("#article-body".into()),
+                    Selector::Css(".crayons-article__body".into()),
+                ],
+                clean: vec![],
+                transforms: vec![],
+                default_cleaner: true,
+            }),
+            extend: HashMap::new(),
+        },
+        // WordPress (all hosts): matched by HTML detection (see
+        // `detect_by_html`), not by hostname — self-hosted WordPress blogs
+        // live on arbitrary domains. Selectors cover the classic Twenty* /
+        // default theme markup used by the vast majority of WP installs.
+        CustomExtractor {
+            domain: "wordpress.org".into(),
+            supported_domains: vec![],
+            title: Some(Field {
+                selectors: vec![
+                    Selector::Css("h1.entry-title".into()),
+                    Selector::Css(".entry-title".into()),
+                    Selector::Css("h1".into()),
+                ],
+            }),
+            author: Some(FieldValue::Selectors(Field {
+                selectors: vec![
+                    Selector::Css(".author.vcard .fn".into()),
+                    Selector::Css("a[rel=\"author\"]".into()),
+                    Selector::Attr {
+                        selector: "meta[name=\"author\"]".into(),
+                        attr: "value".into(),
+                        transform: None,
+                    },
+                ],
+            })),
+            date_published: Some(DateField {
+                selectors: vec![
+                    Selector::Attr {
+                        selector: ".entry-date".into(),
+                        attr: "datetime".into(),
+                        transform: None,
+                    },
+                    Selector::Attr {
+                        selector: ".published".into(),
+                        attr: "datetime".into(),
+                        transform: None,
+                    },
+                    Selector::Attr {
+                        selector: "time[datetime]".into(),
+                        attr: "datetime".into(),
+                        transform: None,
+                    },
+                ],
+                format: None,
+                timezone: None,
+            }),
+            lead_image_url: Some(Field {
+                selectors: vec![Selector::Attr {
+                    selector: "meta[name=\"og:image\"]".into(),
+                    attr: "value".into(),
+                    transform: None,
+                }],
+            }),
+            dek: None,
+            excerpt: None,
+            next_page_url: None,
+            content: Some(ContentField {
+                selectors: vec![
+                    Selector::Css(".entry-content".into()),
+                    Selector::Css(".post-content".into()),
+                    Selector::Css("article".into()),
+                ],
+                clean: vec![
+                    ".sharedaddy".into(),
+                    ".jp-relatedposts".into(),
+                    ".wp-block-post-navigation".into(),
+                ],
+                transforms: vec![],
+                default_cleaner: true,
+            }),
+            extend: HashMap::new(),
+        },
     ]
 }

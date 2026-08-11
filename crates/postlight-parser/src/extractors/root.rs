@@ -113,17 +113,43 @@ pub fn extract_generic(ctx: &ExtractContext<'_>) -> Article {
 /// Extract every field with a custom extractor, falling back to generic per
 /// field (upstream `RootExtractor.extract` for non-`*` domains).
 fn extract_custom(ctx: &ExtractContext<'_>, extractor: &CustomExtractor) -> Article {
-    let title = extract_result(ctx, extractor, "title", None)
+    let title = extract_result(ctx, extractor, "title", None, None)
         .into_value()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| generic::extract_title(ctx.doc, ctx.url, &ctx.meta_cache));
-    let date_published = non_empty(extract_result(ctx, extractor, "date_published", None));
-    let author = non_empty(extract_result(ctx, extractor, "author", None));
-    let next_page_url = non_empty(extract_result(ctx, extractor, "next_page_url", None));
-    let content = non_empty(extract_result(ctx, extractor, "content", Some(&title)));
-    let lead_image_url = non_empty(extract_result(ctx, extractor, "lead_image_url", None));
-    let excerpt = non_empty(extract_result(ctx, extractor, "excerpt", None));
-    let dek = non_empty(extract_result(ctx, extractor, "dek", excerpt.as_deref()));
+    let date_published = non_empty(extract_result(ctx, extractor, "date_published", None, None));
+    let author = non_empty(extract_result(ctx, extractor, "author", None, None));
+    let next_page_url = non_empty(extract_result(ctx, extractor, "next_page_url", None, None));
+    let content = non_empty(extract_result(
+        ctx,
+        extractor,
+        "content",
+        Some(&title),
+        None,
+    ));
+    // Upstream passes the extracted content into the generic excerpt and
+    // lead-image fallbacks so they can score/extract from the content itself.
+    let lead_image_url = non_empty(extract_result(
+        ctx,
+        extractor,
+        "lead_image_url",
+        None,
+        content.as_deref(),
+    ));
+    let excerpt = non_empty(extract_result(
+        ctx,
+        extractor,
+        "excerpt",
+        None,
+        content.as_deref(),
+    ));
+    let dek = non_empty(extract_result(
+        ctx,
+        extractor,
+        "dek",
+        excerpt.as_deref(),
+        None,
+    ));
 
     let word_count = generic::extract_word_count(content.as_deref());
     let direction = generic::extract_direction(&title);
@@ -162,12 +188,15 @@ fn non_empty(result: SelectResult) -> Option<String> {
 }
 
 /// The `extractResult` function: try the custom selector, fall back to the
-/// generic extractor for the field.
+/// generic extractor for the field. `content` is the already-extracted
+/// article content (upstream threads it into the excerpt/lead-image
+/// generic fallbacks).
 fn extract_result(
     ctx: &ExtractContext<'_>,
     extractor: &CustomExtractor,
     field: &str,
     context_value: Option<&str>,
+    content: Option<&str>,
 ) -> SelectResult {
     let extraction_opts = field_opts(extractor, field);
 
@@ -195,10 +224,11 @@ fn extract_result(
             ),
             "dek" => SelectResult::Value(generic::extract_dek().unwrap_or_default()),
             "lead_image_url" => SelectResult::Value(
-                generic::extract_lead_image_url(ctx.doc, None, &ctx.meta_cache).unwrap_or_default(),
+                generic::extract_lead_image_url(ctx.doc, content, &ctx.meta_cache)
+                    .unwrap_or_default(),
             ),
             "excerpt" => SelectResult::Value(
-                generic::extract_excerpt(ctx.doc, None, &ctx.meta_cache).unwrap_or_default(),
+                generic::extract_excerpt(ctx.doc, content, &ctx.meta_cache).unwrap_or_default(),
             ),
             "next_page_url" => SelectResult::Value(
                 generic::extract_next_page_url(
@@ -365,7 +395,8 @@ fn select_html(
                     }
                 }
             }
-            let wrapper_id = wrapper.html.tree.root().last_child()?.id();
+            // Graft the wrapper div itself (not the synthetic fragment
+            // `<html>` element) into the content document.
             let wrapper_node = wrapper.html.tree.get(wrapper_id)?;
             let mut content_root = content.html.tree.root_mut();
             append_cloned(&mut content_root, &wrapper_node);
@@ -374,15 +405,27 @@ fn select_html(
         Selector::Css(css) => {
             let id = ctx.doc.select_ids(&css).into_iter().next()?;
             let node = ctx.doc.get(id)?;
-            let mut root = content.html.tree.root_mut();
-            append_cloned(&mut root, &node);
-            root.last_child()?.id()
+            // Upstream selectHtml wraps the matched element in a `<div>` and
+            // returns the wrapper's outer HTML.
+            let mut wrapper = Doc::parse_fragment("<div></div>");
+            let wrapper_id = wrapper.select_ids("div")[0];
+            if let Some(mut w) = wrapper.html.tree.get_mut(wrapper_id) {
+                append_cloned(&mut w, &node);
+            }
+            let wrapper_node = wrapper.html.tree.get(wrapper_id)?;
+            let mut content_root = content.html.tree.root_mut();
+            append_cloned(&mut content_root, &wrapper_node);
+            content_root.last_child()?.id()
         }
         Selector::Attr { .. } => return None,
     };
 
     // Transform and clean (upstream `transformAndClean`).
-    dom_utils::make_links_absolute(&mut content, ctx.url);
+    dom_utils::make_links_absolute(
+        &mut content,
+        ctx.url,
+        ctx.doc.attr("base", "href").as_deref(),
+    );
 
     for clean_selector in &content_field.clean {
         content.remove_selector(clean_selector);
@@ -407,6 +450,7 @@ fn select_html(
         context_value.unwrap_or(""),
         ctx.url,
         content_field.default_cleaner,
+        ctx.doc.attr("base", "href").as_deref(),
     );
 
     let html = content.serialize();
